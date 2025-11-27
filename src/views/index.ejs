@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GoodVideoSearch</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page__header">
+        <div>
+          <h1>高热度资源筛选</h1>
+          <p class="page__subtitle">
+            最近更新：<span><%= lastUpdated %></span>
+          </p>
+        </div>
+        <form class="filter" method="get">
+          <label>
+            热度下限
+            <input
+              type="number"
+              min="0"
+              name="heat"
+              value="<%= heatThreshold %>"
+              aria-label="热度下限"
+            />
+          </label>
+          <label>
+            起始页
+            <input
+              type="number"
+              min="1"
+              name="pageFrom"
+              value="<%= typeof pageFrom !== 'undefined' ? pageFrom : 1 %>"
+              aria-label="起始页"
+            />
+          </label>
+          <label>
+            结束页
+            <input
+              type="number"
+              min="1"
+              name="pageTo"
+              value="<%= typeof pageTo !== 'undefined' ? pageTo : 5 %>"
+              aria-label="结束页"
+            />
+          </label>
+          <button type="submit">刷新</button>
+        </form>
+      </header>
+
+      <% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
+      <div class="banner banner--error">
+        <strong>请求失败：</strong> <%= errorMessage %>
+      </div>
+      <% } %>
+
+      <% if (!records.length) { %>
+      <section class="empty-state">
+        <p>
+          在第 <%= typeof pageFrom !== 'undefined' ? pageFrom : 1 %>
+          - <%= typeof pageTo !== 'undefined' ? pageTo : 5 %> 页中，
+          未找到热度大于 <%= heatThreshold %> 的记录，稍后再试吧。
+        </p>
+      </section>
+      <% } else { %>
+      <section class="grid">
+        <% records.forEach(function(record) { %>
+        <article class="card">
+          <header class="card__header">
+            <div class="card__badge">#<%= record.order %></div>
+            <h2><%= record.title %></h2>
+          </header>
+
+          <dl class="card__meta">
+            <div>
+              <dt>热度</dt>
+              <dd><%= record.displayHeat %></dd>
+            </div>
+            <div>
+              <dt>收录时间</dt>
+              <dd>
+                <div><%= record.displayRecordedAt %></div>
+                <small><%= record.relativeTime %></small>
+              </dd>
+            </div>
+            <% if (record.meta?.size) { %>
+            <div>
+              <dt>大小</dt>
+              <dd><%= record.meta.size %></dd>
+            </div>
+            <% } %>
+            <% if (record.meta?.type) { %>
+            <div>
+              <dt>类型</dt>
+              <dd><%= record.meta.type %></dd>
+            </div>
+            <% } %>
+          </dl>
+
+          <div class="card__actions">
+            <% if (record.magnet) { %>
+            <a class="btn" href="<%= record.magnet %>">磁力下载</a>
+            <% } %>
+            <a class="btn btn--ghost" href="<%= record.detailUrl %>" target="_blank" rel="noreferrer">
+              查看详情
+            </a>
+          </div>
+        </article>
+        <% }); %>
+      </section>
+      <% } %>
+    </main>
+  </body>
+</html>
+
