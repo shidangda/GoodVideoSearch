@@ -129,7 +129,7 @@
               data-size-text="<%= record.rawSize || '' %>"
               data-type-text="<%= record.rawType || '' %>"
             >
-              标记评分
+              评分
             </button>
             <button
               class="btn btn--ghost btn--hide"
@@ -144,13 +144,13 @@
               data-size-text="<%= record.rawSize || '' %>"
               data-type-text="<%= record.rawType || '' %>"
             >
-              不再显示
+              隐藏
             </button>
             <% if (record.magnet) { %>
-            <a class="btn" href="<%= record.magnet %>">磁力下载</a>
+            <a class="btn" href="<%= record.magnet %>">磁链</a>
             <% } %>
             <a class="btn btn--ghost" href="<%= record.detailUrl %>" target="_blank" rel="noreferrer">
-              查看详情
+              详情
             </a>
           </div>
         </article>
@@ -164,7 +164,7 @@
         <button class="mark-modal__close" type="button" data-mark-close>×</button>
         <div class="mark-modal__body">
           <header>
-            <p class="mark-modal__subtitle">亮星星 + 选择特征标签 + 上传封面</p>
+            <p class="mark-modal__subtitle">选择星级和特征标签后，将提示上传封面</p>
             <h2 data-mark-title>资源标题</h2>
           </header>
 
@@ -211,32 +211,42 @@
     </div>
 
     <script>
-      (() => {
+      document.addEventListener('DOMContentLoaded', () => {
         const modal = document.getElementById('mark-modal');
-        if (!modal) return;
 
         const starButtons = Array.from(modal.querySelectorAll('[data-star]'));
         const tagButtons = Array.from(modal.querySelectorAll('[data-tag]'));
         const closeButtons = modal.querySelectorAll('[data-mark-close]');
         const saveButton = modal.querySelector('[data-mark-save]');
         const titleEl = modal.querySelector('[data-mark-title]');
+        const subtitleEl = modal.querySelector('.mark-modal__subtitle');
         const statusEl = modal.querySelector('[data-mark-status]');
         const dropzone = modal.querySelector('[data-cover-dropzone]');
         const coverInput = modal.querySelector('[data-cover-input]');
         const coverPreview = modal.querySelector('[data-cover-preview]');
         const coverHint = modal.querySelector('[data-cover-hint]');
+        const starSection = modal.querySelector('[data-mark-stars]')?.closest('section');
+        const tagSection = modal.querySelector('.mark-tags')?.closest('section');
+        const coverSection = modal.querySelector('[data-cover-dropzone]')?.closest('section');
+        const footerEl = modal.querySelector('.mark-modal__actions');
 
         const ACTIVE_CLASS = 'is-active';
         const TAG_ACTIVE_CLASS = 'is-selected';
 
         let currentRecord = null;
         let currentRating = 0;
-        const selectedTags = new Set();
+        let selectedTags = new Set();
         let coverFile = null;
+        let currentCard = null;
+        let currentMarkButton = null; // 保存当前触发标记的按钮
+        let isCoverOnlyMode = false;
 
         document.addEventListener('click', (event) => {
+          // 点击评分按钮
           const markTrigger = event.target.closest('[data-mark-resource]');
           if (markTrigger) {
+            currentMarkButton = markTrigger;
+            currentCard = markTrigger.closest('.card');
             openModal({
               resourceId: markTrigger.dataset.resourceId,
               title: markTrigger.dataset.title,
@@ -250,6 +260,7 @@
             return;
           }
 
+          // 隐藏卡片
           const hideTrigger = event.target.closest('[data-hide-resource]');
           if (hideTrigger) {
             handleHideResource(hideTrigger);
@@ -260,6 +271,7 @@
         starButtons.forEach((btn) => {
           btn.addEventListener('click', () => {
             setRating(Number(btn.dataset.star));
+            checkReadyForCover(); // 检查是否可以选择封面
           });
         });
 
@@ -274,6 +286,7 @@
               selectedTags.add(tag);
               btn.classList.add(TAG_ACTIVE_CLASS);
             }
+            checkReadyForCover(); // 检查是否可以选择封面
           });
         });
 
@@ -319,6 +332,16 @@
             setStatus('保存成功！', true);
             setTimeout(() => {
               closeModal();
+              // 隐藏对应的卡片
+              const card = currentCard || (currentMarkButton && currentMarkButton.closest('.card'));
+              if (card) {
+                card.style.transition = 'opacity 0.3s, transform 0.3s';
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                  card.remove();
+                }, 300);
+              }
             }, 800);
           } catch (error) {
             setStatus(error.message || '保存失败');
@@ -347,15 +370,38 @@
           titleEl.textContent = record.title || '未知资源';
           modal.removeAttribute('hidden');
           document.body.style.overflow = 'hidden';
+          coverHint.textContent = '点击或粘贴截图到此处（支持剪贴板）';
           setRating(0);
           tagButtons.forEach((btn) => btn.classList.remove(TAG_ACTIVE_CLASS));
-          coverHint.textContent = '点击或粘贴截图到此处（支持剪贴板）';
+          setCoverOnlyMode(false); // 显示完整的评分界面
+        }
+
+        function checkReadyForCover() {
+          // 如果已选择星级和至少一个标签，自动切换到封面上传模式
+          if (currentRating > 0 && selectedTags.size > 0) {
+            setCoverOnlyMode(true);
+            setStatus('请上传封面截图', false);
+          } else {
+            setCoverOnlyMode(false);
+            setStatus('');
+          }
+        }
+
+        function setCoverOnlyMode(flag) {
+          isCoverOnlyMode = !!flag;
+          if (starSection) starSection.style.display = flag ? 'none' : '';
+          if (tagSection) tagSection.style.display = flag ? 'none' : '';
+          if (coverSection) coverSection.style.display = '';
+          if (subtitleEl) subtitleEl.textContent = flag ? '请上传封面截图（支持粘贴或上传）' : '亮星星 + 选择特征标签 + 上传封面';
+          if (footerEl) footerEl.style.display = '';
         }
 
         function closeModal() {
           modal.setAttribute('hidden', 'true');
           document.body.style.overflow = '';
           currentRecord = null;
+          currentMarkButton = null; // 清除按钮引用
+          setCoverOnlyMode(false);
         }
 
         function setRating(value) {
@@ -383,6 +429,14 @@
             coverHint.textContent = '已加载封面，可重新粘贴覆盖';
           };
           reader.readAsDataURL(file);
+
+          // 封面已就绪，若为只上传封面模式则自动保存
+          if (isCoverOnlyMode && currentRating > 0 && selectedTags.size > 0) {
+            // 延迟一下让用户看到预览，然后自动保存
+            setTimeout(() => {
+              saveButton.click();
+            }, 500);
+          }
         }
 
         function handlePaste(event) {
@@ -458,7 +512,7 @@
             alert('隐藏失败: ' + error.message);
           }
         }
-      })();
+      });
     </script>
   </body>
 </html>

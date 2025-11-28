@@ -50,75 +50,171 @@ body.history-page {
   color: var(--accent);
 }
 
-/* Cards grid on realtime/high-heat page: left-aligned, no stretching */
+/* Cards grid on realtime/high-heat page: left-aligned, fixed width cards */
 .grid {
   display: grid;
   gap: 1.5rem;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 300px));
+  grid-template-columns: repeat(auto-fill, 320px);
   justify-content: start;
 }
 
 .card {
   background: var(--card-bg);
   border-radius: 1.5rem;
-  padding: 1.5rem;
+  padding: 1.25rem;
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.875rem;
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(10px);
+  width: 100%;
+  max-width: 100%; /* 跟随栅格列宽，不再拉伸 */
+  min-height: 0; /* 允许 flex 子元素收缩 */
 }
 
 .card__header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 0.75rem;
+  margin-bottom: 0.25rem;
 }
 
 .card__header h2 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
+  line-height: 1.4;
+  font-weight: 600;
+  flex: 1;
+  word-break: break-word;
 }
 
 .card__badge {
-  padding: 0.2rem 0.8rem;
+  padding: 0.25rem 0.7rem;
   border-radius: 999px;
   background: rgba(34, 211, 238, 0.2);
   color: var(--accent);
   font-weight: 600;
+  font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
 .card__meta {
   display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.625rem;
+  grid-template-columns: repeat(2, 1fr);
   margin: 0;
+  flex: 1; /* 占据剩余空间，让按钮推到底部 */
 }
 
 .card__meta dt {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #94a3b8;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.15rem;
+  font-weight: 500;
 }
 
 .card__meta dd {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .card__meta small {
   font-weight: 400;
   color: #94a3b8;
+  font-size: 0.8rem;
+  display: block;
+  margin-top: 0.15rem;
+}
+
+/* Inline rate bar (stars + tags) */
+.card__ratebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.25rem 0.25rem;
+}
+
+.rate-stars {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.rate-star {
+  width: 34px;
+  height: 34px;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.5);
+  color: #cbd5f5;
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rate-star.is-active {
+  border-color: #fde68a;
+  color: #f59e0b;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.rate-star:hover {
+  transform: translateY(-1px);
+}
+
+.rate-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tag-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.28rem 0.7rem;
+  background: rgba(15, 23, 42, 0.5);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tag-chip.is-selected {
+  border-color: #22d3ee;
+  background: rgba(34, 211, 238, 0.18);
+  color: #0f172a;
+}
+
+.rate-hint {
+  color: #94a3b8;
+  font-size: 0.75rem;
 }
 
 .card__actions {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.625rem;
+  margin-top: auto; /* 推到底部，确保所有卡片按钮对齐 */
+  padding-top: 0.5rem; /* 与上方内容保持间距 */
+}
+
+.card__actions .btn {
+  font-size: 0.85rem;
+  padding: 0.65rem 0.5rem;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
 }
 
 .header-actions {
@@ -127,7 +223,6 @@ body.history-page {
 }
 
 .btn {
-  flex: 1;
   text-align: center;
   padding: 0.75rem 1rem;
   border-radius: 0.9rem;
@@ -137,6 +232,14 @@ body.history-page {
   font-weight: 600;
   color: #0f172a;
   background: linear-gradient(90deg, #22d3ee, #14b8a6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 在卡片内时使用 grid，不需要 flex: 1 */
+.card__actions .btn {
+  flex: none;
 }
 
 .btn--ghost {
@@ -159,6 +262,182 @@ body.history-page {
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ===== Mark Modal (评分弹窗) ===== */
+.mark-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.mark-modal[hidden] {
+  display: none;
+}
+
+.mark-modal__dialog {
+  width: min(640px, 95vw);
+  max-height: min(90vh, 600px);
+  background: #0f172a;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border);
+  padding: 1.75rem;
+  position: relative;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+}
+
+.mark-modal__close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: #e2e8f0;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mark-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mark-modal__body header h2 {
+  margin: 0.25rem 0 0;
+  font-size: 1.1rem;
+  color: #e2e8f0;
+}
+
+.mark-modal__subtitle {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.mark-modal__body section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mark-modal__body h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #cbd5f5;
+}
+
+.mark-modal__status {
+  min-height: 1.25rem;
+  margin: 0;
+  font-size: 0.9rem;
+  color: #f87171;
+}
+
+.mark-modal__status.is-success {
+  color: #34d399;
+}
+
+.mark-modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.mark-stars {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.mark-stars__item {
+  width: 48px;
+  height: 48px;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.6);
+  color: #cbd5f5;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mark-stars__item.is-active {
+  border-color: #fde68a;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.mark-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.mark-tag {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  background: rgba(15, 23, 42, 0.5);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.mark-tag.is-selected {
+  border-color: #22d3ee;
+  background: rgba(34, 211, 238, 0.2);
+}
+
+.cover-dropzone {
+  border: 1px dashed var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 200px;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.cover-dropzone:hover {
+  border-color: #22d3ee;
+  background: rgba(34, 211, 238, 0.05);
+}
+
+.cover-dropzone p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.cover-dropzone img {
+  max-height: 220px;
+  width: auto;
+  margin: 0 auto;
+  border-radius: 0.75rem;
 }
 
 /* ===== History page styles ===== */
@@ -196,6 +475,31 @@ body.history-page {
 
 .history-filter__submit {
   padding-inline: 1.5rem;
+  flex: 0 0 auto; /* 不拉伸 */
+}
+
+/* 统一历史页按钮样式 */
+.history-actions .btn,
+.history-actions .history-filter__submit {
+  font-size: 0.9rem;
+  padding: 0.6rem 1.25rem;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  transition: all 0.2s ease;
+}
+
+.history-actions .btn--ghost {
+  background: rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  box-shadow: 0 2px 8px rgba(148, 163, 184, 0.15);
+}
+
+.history-actions .btn--ghost:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(148, 163, 184, 0.6);
+  box-shadow: 0 4px 12px rgba(148, 163, 184, 0.25);
+  transform: translateY(-1px);
 }
 
 /* Centered fixed cards, avoid stretching when only 1-2 per row */
@@ -394,8 +698,14 @@ body.history-page {
 
 /* Small-screen fallback */
 @media (max-width: 360px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
   .history-grid {
     grid-template-columns: 1fr;
+  }
+  .card {
+    max-width: 100%;
   }
 }
 
