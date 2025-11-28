@@ -834,12 +834,18 @@ start_application() {
         pm2 delete goodvideosearch || true
     fi
     
-    # 使用 ecosystem.config.js 启动（如果存在）
-    if [ -f "ecosystem.config.js" ]; then
+    # 使用 ecosystem.config.cjs 或 ecosystem.config.js 启动（如果存在）
+    # 优先使用 .cjs 文件（兼容 ES 模块项目）
+    if [ -f "ecosystem.config.cjs" ]; then
+        print_info "使用 ecosystem.config.cjs 启动应用..."
+        # 切换到项目所有者用户执行 PM2，并确保在项目目录中
+        # PM2 的 env_file 配置需要从项目根目录读取 .env 文件
+        sudo -u $SUDO_USER bash -c "cd '$PROJECT_DIR' && pm2 start ecosystem.config.cjs"
+    elif [ -f "ecosystem.config.js" ]; then
         print_info "使用 ecosystem.config.js 启动应用..."
         # 切换到项目所有者用户执行 PM2，并确保在项目目录中
         # PM2 的 env_file 配置需要从项目根目录读取 .env 文件
-        sudo -u $SUDO_USER bash -c "cd $PROJECT_DIR && pm2 start ecosystem.config.js"
+        sudo -u $SUDO_USER bash -c "cd '$PROJECT_DIR' && pm2 start ecosystem.config.js"
     else
         print_info "启动应用..."
         # 使用 --env-file 参数加载 .env 文件（PM2 5.1+ 支持）

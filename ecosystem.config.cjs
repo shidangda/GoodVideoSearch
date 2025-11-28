@@ -1,4 +1,6 @@
 // PM2 配置文件
+// 使用 .cjs 扩展名，因为项目使用 ES 模块（package.json 中 "type": "module"）
+// PM2 需要使用 CommonJS 格式加载配置文件
 module.exports = {
   apps: [
     {
@@ -6,7 +8,7 @@ module.exports = {
       script: 'src/app.js',
       instances: 1,
       exec_mode: 'fork',
-      // 加载 .env 文件（Node.js 18+ 支持）
+      // 加载 .env 文件（PM2 5.1+ 支持）
       env_file: '.env',
       env: {
         NODE_ENV: 'production',
