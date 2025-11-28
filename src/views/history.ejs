@@ -8,14 +8,48 @@
   </head>
   <body class="history-page">
     <main class="page">
+      <% const _ratingMin = (typeof ratingMin === 'undefined' ? 0 : Number(ratingMin));
+         const _sortBy = (typeof sortBy === 'undefined' ? 'time' : sortBy);
+         const _sortOrder = (typeof sortOrder === 'undefined' ? 'desc' : sortOrder); %>
       <header class="page__header">
         <div>
           <h1>历史资源</h1>
           <p class="page__subtitle">
-            已完成的精选资源，共 <span><%= records.length %></span> 条
+            已完成的精选资源，共 <span id="history-count"><%= records.length %></span> 条
           </p>
         </div>
         <div class="history-actions">
+          <form class="history-filter" id="history-filter-form">
+            <label>
+              最低星级
+              <select name="ratingMin" id="filter-rating-min">
+                <option value="0" <%= _ratingMin === 0 ? 'selected' : '' %>>不限</option>
+                <option value="5" <%= _ratingMin === 5 ? 'selected' : '' %>>≥ 5 星</option>
+                <option value="4" <%= _ratingMin === 4 ? 'selected' : '' %>>≥ 4 星</option>
+                <option value="3" <%= _ratingMin === 3 ? 'selected' : '' %>>≥ 3 星</option>
+              </select>
+            </label>
+
+            <label>
+              排序字段
+              <select name="sortBy" id="filter-sort-by">
+                <option value="time" <%= _sortBy === 'time' ? 'selected' : '' %>>按时间</option>
+                <option value="heat" <%= _sortBy === 'heat' ? 'selected' : '' %>>按热度</option>
+                <option value="rating" <%= _sortBy === 'rating' ? 'selected' : '' %>>按星级</option>
+              </select>
+            </label>
+
+            <label>
+              顺序
+              <select name="sortOrder" id="filter-sort-order">
+                <option value="desc" <%= _sortOrder === 'desc' ? 'selected' : '' %>>倒序（高 → 低）</option>
+                <option value="asc" <%= _sortOrder === 'asc' ? 'selected' : '' %>>正序（低 → 高）</option>
+              </select>
+            </label>
+
+            <button type="button" class="btn btn--ghost history-filter__submit" id="filter-apply-btn">应用</button>
+          </form>
+
           <a class="btn btn--ghost" href="/">返回实时列表</a>
         </div>
       </header>
@@ -26,13 +60,24 @@
       </section>
       <% } else { %>
       <section class="history-grid">
-        <% records.forEach(function(record) { %>
-        <article class="history-card">
+        <% records.forEach(function(record, idx) { %>
+        <article
+          class="history-card"
+          data-rating="<%= typeof record.rating !== 'undefined' ? record.rating : 0 %>"
+          data-heat="<%= typeof record.heat !== 'undefined' ? record.heat : 0 %>"
+          data-time="<%= record.isoRecordedAt || record.recordedAt || record.displayRecordedAt || '' %>"
+          data-index="<%= idx %>"
+        >
           <div class="history-card__cover">
             <% if (record.coverUrl) { %>
-            <img src="<%= record.coverUrl %>" alt="<%= record.title %>" loading="lazy" />
+            <img
+              src="<%= record.coverUrl %>"
+              alt="<%= record.title %>"
+              loading="lazy"
+              data-history-cover
+            />
             <% } else { %>
-            <div class="history-card__cover--placeholder">暂无封面</div>
+            <div class="history-card__cover--placeholder" data-history-cover-placeholder>暂无封面</div>
             <% } %>
             <div class="history-card__rating">
               <% for (let i = 1; i <= 5; i += 1) { %>
@@ -84,6 +129,172 @@
       </section>
       <% } %>
     </main>
+
+    <script>
+      // 历史资源筛选和排序（纯前端无刷新）
+      (() => {
+        const grid = document.querySelector('.history-grid');
+        const countEl = document.getElementById('history-count');
+        const filterForm = document.getElementById('history-filter-form');
+        const ratingMinSelect = document.getElementById('filter-rating-min');
+        const sortBySelect = document.getElementById('filter-sort-by');
+        const sortOrderSelect = document.getElementById('filter-sort-order');
+        const applyBtn = document.getElementById('filter-apply-btn');
+
+        if (!grid || !filterForm) return;
+
+        // 解析时间字符串为可比较的值
+        const parseTime = (timeStr) => {
+          if (!timeStr) return 0;
+          // 尝试解析 ISO 格式
+          const isoMatch = timeStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (isoMatch) {
+            return new Date(timeStr).getTime();
+          }
+          // 尝试解析常见格式，如 "2024-01-01 12:00:00"
+          const date = new Date(timeStr);
+          if (!isNaN(date.getTime())) {
+            return date.getTime();
+          }
+          return 0;
+        };
+
+        // 获取排序值
+        const getSortValue = (card, sortBy) => {
+          switch (sortBy) {
+            case 'rating':
+              return Number(card.dataset.rating) || 0;
+            case 'heat':
+              return Number(card.dataset.heat) || 0;
+            case 'time':
+              return parseTime(card.dataset.time);
+            default:
+              return 0;
+          }
+        };
+
+        // 筛选和排序卡片
+        const filterAndSort = () => {
+          const ratingMin = Number(ratingMinSelect.value) || 0;
+          const sortBy = sortBySelect.value || 'time';
+          const sortOrder = sortOrderSelect.value || 'desc';
+
+          const cards = Array.from(grid.querySelectorAll('.history-card'));
+          const fragment = document.createDocumentFragment();
+
+          // 筛选：按最低星级
+          const filtered = cards.filter((card) => {
+            const rating = Number(card.dataset.rating) || 0;
+            return rating >= ratingMin;
+          });
+
+          // 排序
+          filtered.sort((a, b) => {
+            const aVal = getSortValue(a, sortBy);
+            const bVal = getSortValue(b, sortBy);
+            if (sortOrder === 'asc') {
+              return aVal - bVal;
+            } else {
+              return bVal - aVal;
+            }
+          });
+
+          // 添加过渡效果
+          cards.forEach((card) => {
+            card.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+            if (!filtered.includes(card)) {
+              card.style.opacity = '0';
+              card.style.transform = 'scale(0.95)';
+            }
+          });
+
+          // 重新排列可见卡片
+          setTimeout(() => {
+            filtered.forEach((card) => {
+              card.style.opacity = '';
+              card.style.transform = '';
+              fragment.appendChild(card);
+            });
+            grid.innerHTML = '';
+            grid.appendChild(fragment);
+
+            // 更新计数
+            if (countEl) {
+              countEl.textContent = filtered.length;
+            }
+          }, 200);
+        };
+
+        // 监听表单变化
+        applyBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          filterAndSort();
+        });
+
+        // 可选：实时响应下拉框变化（取消注释以启用）
+        // ratingMinSelect.addEventListener('change', filterAndSort);
+        // sortBySelect.addEventListener('change', filterAndSort);
+        // sortOrderSelect.addEventListener('change', filterAndSort);
+
+        // 阻止表单默认提交
+        filterForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          filterAndSort();
+        });
+      })();
+
+      // 历史资源封面放大预览（点击封面放大，点击空白处或按 Esc 关闭）
+      (() => {
+        const createLightbox = (src, alt) => {
+          const overlay = document.createElement('div');
+          overlay.className = 'history-lightbox';
+          overlay.innerHTML = `
+            <div class="history-lightbox__backdrop"></div>
+            <figure class="history-lightbox__content">
+              <img src="${src}" alt="${alt || ''}" class="history-lightbox__image" />
+              <figcaption class="history-lightbox__caption">
+                点击空白处或按 Esc 关闭预览
+              </figcaption>
+            </figure>
+          `;
+
+          const remove = () => {
+            document.body.classList.remove('history-lightbox-open');
+            overlay.classList.add('is-leaving');
+            setTimeout(() => overlay.remove(), 180);
+            window.removeEventListener('keydown', onKeydown);
+          };
+
+          const onKeydown = (event) => {
+            if (event.key === 'Escape') {
+              remove();
+            }
+          };
+
+          overlay.addEventListener('click', (event) => {
+            if (
+              event.target.classList.contains('history-lightbox__backdrop') ||
+              event.target.classList.contains('history-lightbox')
+            ) {
+              remove();
+            }
+          });
+
+          window.addEventListener('keydown', onKeydown);
+
+          document.body.appendChild(overlay);
+          document.body.classList.add('history-lightbox-open');
+        };
+
+        document.addEventListener('click', (event) => {
+          const img = event.target.closest('[data-history-cover]');
+          if (img) {
+            event.preventDefault();
+            createLightbox(img.getAttribute('src'), img.getAttribute('alt'));
+            return;
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
-
