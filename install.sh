@@ -43,7 +43,16 @@ NC='\033[0m'          # 重置颜色
 GIT_REPO="https://github.com/shidangda/GoodVideoSearch.git"
 
 # 项目安装目录（会在用户主目录下创建）
-PROJECT_DIR="$HOME/GoodVideoSearch"
+# 注意：使用 sudo 运行时，$HOME 是 root 的目录，需要获取实际用户的 home 目录
+# 如果 $SUDO_USER 未设置（直接 root 登录），则使用 $HOME
+if [ -n "$SUDO_USER" ]; then
+    # 获取 sudo 用户的 home 目录
+    SUDO_USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    PROJECT_DIR="$SUDO_USER_HOME/GoodVideoSearch"
+else
+    # 直接 root 用户运行，使用 root 的 home 目录
+    PROJECT_DIR="$HOME/GoodVideoSearch"
+fi
 
 # Node.js 版本（推荐使用 18 或更高版本）
 NODE_VERSION="18"
@@ -317,7 +326,13 @@ install_pm2() {
     
     # 配置 PM2 开机自启
     print_info "配置 PM2 开机自启..."
-    pm2 startup systemd -u $SUDO_USER --hp $HOME
+    # 获取实际用户的 home 目录
+    if [ -n "$SUDO_USER" ]; then
+        USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+        pm2 startup systemd -u $SUDO_USER --hp "$USER_HOME"
+    else
+        pm2 startup systemd -u root --hp "$HOME"
+    fi
     
     PM2_VER=$(pm2 --version)
     print_success "PM2 安装完成: $PM2_VER"
@@ -347,8 +362,10 @@ clone_project() {
     print_info "仓库地址: $GIT_REPO"
     print_info "目标目录: $PROJECT_DIR"
     
-    # 切换到用户主目录
-    cd "$HOME"
+    # 切换到项目所在目录的父目录（确保目录存在）
+    PROJECT_PARENT=$(dirname "$PROJECT_DIR")
+    mkdir -p "$PROJECT_PARENT"
+    cd "$PROJECT_PARENT"
     
     # 克隆项目
     git clone "$GIT_REPO" "$PROJECT_DIR"
@@ -790,6 +807,18 @@ configure_firewall() {
 start_application() {
     print_separator "步骤 13/13: 启动应用"
     
+    # 检查项目目录是否存在
+    if [ ! -d "$PROJECT_DIR" ]; then
+        print_error "项目目录不存在: $PROJECT_DIR"
+        exit 1
+    fi
+    
+    # 确保项目目录的所有者是正确的用户
+    print_info "设置项目目录权限..."
+    chown -R $SUDO_USER:$SUDO_USER "$PROJECT_DIR" 2>/dev/null || {
+        print_warning "无法更改项目目录所有者，继续执行..."
+    }
+    
     cd "$PROJECT_DIR"
     
     # 创建必要的目录
@@ -816,11 +845,11 @@ start_application() {
         # 使用 --env-file 参数加载 .env 文件（PM2 5.1+ 支持）
         # 如果 PM2 版本不支持，需要手动设置环境变量
         if pm2 --version | grep -qE "^[5-9]|^[1-9][0-9]"; then
-            sudo -u $SUDO_USER bash -c "cd $PROJECT_DIR && pm2 start src/app.js --name goodvideosearch --env-file .env"
+            sudo -u $SUDO_USER bash -c "cd '$PROJECT_DIR' && pm2 start src/app.js --name goodvideosearch --env-file .env"
         else
             # 旧版本 PM2，需要手动加载环境变量
             print_warning "PM2 版本较旧，手动加载环境变量..."
-            sudo -u $SUDO_USER bash -c "cd $PROJECT_DIR && export \$(cat .env | xargs) && pm2 start src/app.js --name goodvideosearch"
+            sudo -u $SUDO_USER bash -c "cd '$PROJECT_DIR' && export \$(cat .env | xargs) && pm2 start src/app.js --name goodvideosearch"
         fi
     fi
     
