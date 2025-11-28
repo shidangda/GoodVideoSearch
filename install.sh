@@ -40,7 +40,11 @@ NC='\033[0m'          # 重置颜色
 # 配置变量 - 可以根据需要修改这些默认值
 ################################################################################
 # Git 仓库地址
+# 如果 GitHub 访问慢，可以使用镜像站（取消注释下面的行）
 GIT_REPO="https://github.com/shidangda/GoodVideoSearch.git"
+# GitHub 镜像站选项（如果上面的连接失败，脚本会自动尝试镜像）
+# GIT_REPO_MIRROR_1="https://ghproxy.com/https://github.com/shidangda/GoodVideoSearch.git"
+# GIT_REPO_MIRROR_2="https://mirror.ghproxy.com/https://github.com/shidangda/GoodVideoSearch.git"
 
 # 项目安装目录（会在用户主目录下创建）
 # 注意：使用 sudo 运行时，$HOME 是 root 的目录，需要获取实际用户的 home 目录
@@ -363,13 +367,53 @@ clone_project() {
     print_info "仓库地址: $GIT_REPO"
     print_info "目标目录: $PROJECT_DIR"
     
+    # 配置 Git 超时时间（避免连接超时）
+    print_info "配置 Git 超时设置..."
+    git config --global http.postBuffer 524288000
+    git config --global http.lowSpeedLimit 0
+    git config --global http.lowSpeedTime 999999
+    git config --global http.timeout 300
+    
     # 切换到项目所在目录的父目录（确保目录存在）
     PROJECT_PARENT=$(dirname "$PROJECT_DIR")
     mkdir -p "$PROJECT_PARENT"
     cd "$PROJECT_PARENT"
     
-    # 克隆项目
-    git clone "$GIT_REPO" "$PROJECT_DIR"
+    # 尝试克隆项目，如果失败则尝试镜像站
+    print_info "正在克隆项目..."
+    if git clone "$GIT_REPO" "$PROJECT_DIR" 2>&1; then
+        print_success "项目克隆完成"
+    else
+        print_warning "GitHub 直接连接失败，尝试使用镜像站..."
+        
+        # 尝试镜像站 1: ghproxy.com
+        MIRROR_1="https://ghproxy.com/https://github.com/shidangda/GoodVideoSearch.git"
+        print_info "尝试镜像站 1: ghproxy.com"
+        if git clone "$MIRROR_1" "$PROJECT_DIR" 2>&1; then
+            print_success "使用镜像站克隆成功"
+        else
+            # 尝试镜像站 2: mirror.ghproxy.com
+            MIRROR_2="https://mirror.ghproxy.com/https://github.com/shidangda/GoodVideoSearch.git"
+            print_info "尝试镜像站 2: mirror.ghproxy.com"
+            if git clone "$MIRROR_2" "$PROJECT_DIR" 2>&1; then
+                print_success "使用镜像站克隆成功"
+            else
+                print_error "所有克隆方式都失败了"
+                print_info "请尝试以下解决方案："
+                echo "  1. 手动下载项目："
+                echo "     wget https://ghproxy.com/https://github.com/shidangda/GoodVideoSearch/archive/refs/heads/main.zip"
+                echo "     unzip main.zip && mv GoodVideoSearch-main GoodVideoSearch"
+                echo ""
+                echo "  2. 或使用代理（如果可用）"
+                echo ""
+                read -p "是否继续安装（假设项目已手动下载）？(y/n): " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    exit 1
+                fi
+            fi
+        fi
+    fi
     
     if [ -d "$PROJECT_DIR" ]; then
         print_success "项目克隆完成"
