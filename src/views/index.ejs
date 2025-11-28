@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
+    <% const FEATURE_TAGS = ['高颜值', '高身长', '美腿', '温柔可爱', '高冷御姐']; %>
     <main class="page">
       <header class="page__header">
         <div>
@@ -15,7 +16,22 @@
             最近更新：<span><%= lastUpdated %></span>
           </p>
         </div>
+        <div class="header-actions">
+          <a class="btn btn--ghost" href="/history">历史资源</a>
+        </div>
         <form class="filter" method="get">
+          <label class="filter__wide">
+            数据来源
+            <input
+              type="url"
+              name="searchUrl"
+              value="<%= searchUrl %>"
+              placeholder="https://www.cilifan.mom/search/666332_1_id.html"
+              aria-label="目标列表页地址"
+              required
+            />
+            <small class="filter__hint">默认抓取上述地址，可粘贴任意同类列表页。</small>
+          </label>
           <label>
             热度下限
             <input
@@ -88,7 +104,7 @@
             <% if (record.meta?.size) { %>
             <div>
               <dt>大小</dt>
-              <dd><%= record.meta.size %></dd>
+              <dd><%= record.displaySize || '未知' %></dd>
             </div>
             <% } %>
             <% if (record.meta?.type) { %>
@@ -100,6 +116,36 @@
           </dl>
 
           <div class="card__actions">
+            <button
+              class="btn btn--ghost"
+              type="button"
+              data-mark-resource
+              data-resource-id="<%= record.detailUrl || record.magnet || `record-${record.order}` %>"
+              data-title="<%= record.title %>"
+              data-magnet="<%= record.magnet || '' %>"
+              data-detail-url="<%= record.detailUrl || '' %>"
+              data-heat="<%= record.heat || '' %>"
+              data-recorded-at="<%= record.isoRecordedAt || '' %>"
+              data-size-text="<%= record.rawSize || '' %>"
+              data-type-text="<%= record.rawType || '' %>"
+            >
+              标记评分
+            </button>
+            <button
+              class="btn btn--ghost btn--hide"
+              type="button"
+              data-hide-resource
+              data-resource-id="<%= record.detailUrl || record.magnet || `record-${record.order}` %>"
+              data-title="<%= record.title %>"
+              data-magnet="<%= record.magnet || '' %>"
+              data-detail-url="<%= record.detailUrl || '' %>"
+              data-heat="<%= record.heat || '' %>"
+              data-recorded-at="<%= record.isoRecordedAt || '' %>"
+              data-size-text="<%= record.rawSize || '' %>"
+              data-type-text="<%= record.rawType || '' %>"
+            >
+              不再显示
+            </button>
             <% if (record.magnet) { %>
             <a class="btn" href="<%= record.magnet %>">磁力下载</a>
             <% } %>
@@ -112,6 +158,308 @@
       </section>
       <% } %>
     </main>
+
+    <div id="mark-modal" class="mark-modal" hidden>
+      <div class="mark-modal__dialog">
+        <button class="mark-modal__close" type="button" data-mark-close>×</button>
+        <div class="mark-modal__body">
+          <header>
+            <p class="mark-modal__subtitle">亮星星 + 选择特征标签 + 上传封面</p>
+            <h2 data-mark-title>资源标题</h2>
+          </header>
+
+          <section>
+            <h3>评分星级</h3>
+            <div class="mark-stars" data-mark-stars>
+              <% for (let i = 1; i <= 5; i += 1) { %>
+              <button class="mark-stars__item" type="button" data-star="<%= i %>" aria-label="评分 <%= i %> 星">
+                ★
+              </button>
+              <% } %>
+            </div>
+          </section>
+
+          <section>
+            <h3>特征标签</h3>
+            <div class="mark-tags">
+              <% FEATURE_TAGS.forEach(function(tag) { %>
+              <button class="mark-tag" type="button" data-tag="<%= tag %>">
+                <span>☆</span>
+                <%= tag %>
+              </button>
+              <% }); %>
+            </div>
+          </section>
+
+          <section>
+            <h3>封面截图</h3>
+            <div class="cover-dropzone" data-cover-dropzone>
+              <p data-cover-hint>点击或粘贴截图到此处（支持剪贴板）</p>
+              <input type="file" accept="image/*" data-cover-input hidden />
+              <img data-cover-preview alt="封面预览" hidden />
+            </div>
+          </section>
+
+          <p class="mark-modal__status" data-mark-status></p>
+
+          <footer class="mark-modal__actions">
+            <button type="button" class="btn btn--ghost" data-mark-close>取消</button>
+            <button type="button" class="btn" data-mark-save>保存到历史</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        const modal = document.getElementById('mark-modal');
+        if (!modal) return;
+
+        const starButtons = Array.from(modal.querySelectorAll('[data-star]'));
+        const tagButtons = Array.from(modal.querySelectorAll('[data-tag]'));
+        const closeButtons = modal.querySelectorAll('[data-mark-close]');
+        const saveButton = modal.querySelector('[data-mark-save]');
+        const titleEl = modal.querySelector('[data-mark-title]');
+        const statusEl = modal.querySelector('[data-mark-status]');
+        const dropzone = modal.querySelector('[data-cover-dropzone]');
+        const coverInput = modal.querySelector('[data-cover-input]');
+        const coverPreview = modal.querySelector('[data-cover-preview]');
+        const coverHint = modal.querySelector('[data-cover-hint]');
+
+        const ACTIVE_CLASS = 'is-active';
+        const TAG_ACTIVE_CLASS = 'is-selected';
+
+        let currentRecord = null;
+        let currentRating = 0;
+        const selectedTags = new Set();
+        let coverFile = null;
+
+        document.addEventListener('click', (event) => {
+          const markTrigger = event.target.closest('[data-mark-resource]');
+          if (markTrigger) {
+            openModal({
+              resourceId: markTrigger.dataset.resourceId,
+              title: markTrigger.dataset.title,
+              magnet: markTrigger.dataset.magnet,
+              detailUrl: markTrigger.dataset.detailUrl,
+              heat: markTrigger.dataset.heat,
+              recordedAt: markTrigger.dataset.recordedAt,
+              sizeText: markTrigger.dataset.sizeText,
+              typeText: markTrigger.dataset.typeText,
+            });
+            return;
+          }
+
+          const hideTrigger = event.target.closest('[data-hide-resource]');
+          if (hideTrigger) {
+            handleHideResource(hideTrigger);
+            return;
+          }
+        });
+
+        starButtons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            setRating(Number(btn.dataset.star));
+          });
+        });
+
+        tagButtons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const tag = btn.dataset.tag;
+            if (!tag) return;
+            if (selectedTags.has(tag)) {
+              selectedTags.delete(tag);
+              btn.classList.remove(TAG_ACTIVE_CLASS);
+            } else {
+              selectedTags.add(tag);
+              btn.classList.add(TAG_ACTIVE_CLASS);
+            }
+          });
+        });
+
+        closeButtons.forEach((btn) => {
+          btn.addEventListener('click', closeModal);
+        });
+
+        saveButton.addEventListener('click', async () => {
+          if (!currentRecord) {
+            setStatus('资源信息缺失，请刷新页面');
+            return;
+          }
+          if (!currentRating) {
+            setStatus('请先选择星级评分');
+            return;
+          }
+          if (!coverFile) {
+            setStatus('请粘贴或上传封面截图');
+            return;
+          }
+
+          const formData = new FormData();
+          Object.entries(currentRecord).forEach(([key, value]) => {
+            if (typeof value !== 'undefined' && value !== null) {
+              formData.append(key, value);
+            }
+          });
+          formData.append('rating', currentRating);
+          formData.append('tags', JSON.stringify(Array.from(selectedTags)));
+          formData.append('cover', coverFile);
+
+          setStatus('保存中，请稍候...', true);
+
+          try {
+            const response = await fetch('/history', {
+              method: 'POST',
+              body: formData,
+            });
+            if (!response.ok) {
+              const payload = await response.json().catch(() => ({}));
+              throw new Error(payload.message || '保存失败');
+            }
+            setStatus('保存成功！', true);
+            setTimeout(() => {
+              closeModal();
+            }, 800);
+          } catch (error) {
+            setStatus(error.message || '保存失败');
+          }
+        });
+
+        dropzone.addEventListener('click', () => coverInput.click());
+        dropzone.addEventListener('paste', handlePaste);
+        modal.addEventListener('paste', handlePaste);
+        coverInput.addEventListener('change', () => {
+          const [file] = coverInput.files || [];
+          if (file) {
+            setCoverFile(file);
+          }
+        });
+
+        function openModal(record) {
+          currentRecord = record;
+          currentRating = 0;
+          selectedTags.clear();
+          coverFile = null;
+          coverPreview.hidden = true;
+          coverPreview.removeAttribute('src');
+          coverInput.value = '';
+          setStatus('');
+          titleEl.textContent = record.title || '未知资源';
+          modal.removeAttribute('hidden');
+          document.body.style.overflow = 'hidden';
+          setRating(0);
+          tagButtons.forEach((btn) => btn.classList.remove(TAG_ACTIVE_CLASS));
+          coverHint.textContent = '点击或粘贴截图到此处（支持剪贴板）';
+        }
+
+        function closeModal() {
+          modal.setAttribute('hidden', 'true');
+          document.body.style.overflow = '';
+          currentRecord = null;
+        }
+
+        function setRating(value) {
+          currentRating = value;
+          starButtons.forEach((btn) => {
+            const starValue = Number(btn.dataset.star);
+            if (starValue <= value) {
+              btn.classList.add(ACTIVE_CLASS);
+            } else {
+              btn.classList.remove(ACTIVE_CLASS);
+            }
+          });
+        }
+
+        function setCoverFile(file) {
+          if (!file || !file.type.startsWith('image/')) {
+            setStatus('请粘贴或上传图片文件');
+            return;
+          }
+          coverFile = file;
+          const reader = new FileReader();
+          reader.onload = () => {
+            coverPreview.src = reader.result;
+            coverPreview.hidden = false;
+            coverHint.textContent = '已加载封面，可重新粘贴覆盖';
+          };
+          reader.readAsDataURL(file);
+        }
+
+        function handlePaste(event) {
+          const items = event.clipboardData?.items;
+          if (!items) return;
+          for (const item of items) {
+            if (item.type.startsWith('image/')) {
+              const blob = item.getAsFile();
+              if (blob) {
+                const file = new File([blob], `cover-${Date.now()}.png`, {
+                  type: blob.type || 'image/png',
+                });
+                setCoverFile(file);
+                event.preventDefault();
+                return;
+              }
+            }
+          }
+        }
+
+        function setStatus(message, success = false) {
+          statusEl.textContent = message;
+          statusEl.classList.toggle('is-success', success);
+        }
+
+        async function handleHideResource(button) {
+          const card = button.closest('.card');
+          if (!card) return;
+
+          const resourceId = button.dataset.resourceId;
+          const title = button.dataset.title;
+          const magnet = button.dataset.magnet || '';
+          const detailUrl = button.dataset.detailUrl || '';
+          const heat = button.dataset.heat || '';
+          const recordedAt = button.dataset.recordedAt || '';
+          const sizeText = button.dataset.sizeText || '';
+          const typeText = button.dataset.typeText || '';
+
+          button.disabled = true;
+          button.textContent = '隐藏中...';
+
+          try {
+            const response = await fetch('/hide-resource', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                resourceId,
+                title,
+                magnet,
+                detailUrl,
+                heat,
+                recordedAt,
+                sizeText,
+                typeText,
+              }),
+            });
+
+            if (!response.ok) {
+              const data = await response.json();
+              throw new Error(data.message || '隐藏失败');
+            }
+
+            // 隐藏卡片
+            card.style.transition = 'opacity 0.3s, transform 0.3s';
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+              card.remove();
+            }, 300);
+          } catch (error) {
+            button.disabled = false;
+            button.textContent = '不再显示';
+            alert('隐藏失败: ' + error.message);
+          }
+        }
+      })();
+    </script>
   </body>
 </html>
 

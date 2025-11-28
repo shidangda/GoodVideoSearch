@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>历史资源 - GoodVideoSearch</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="history-page">
+    <main class="page">
+      <header class="page__header">
+        <div>
+          <h1>历史资源</h1>
+          <p class="page__subtitle">
+            已完成的精选资源，共 <span><%= records.length %></span> 条
+          </p>
+        </div>
+        <div class="history-actions">
+          <a class="btn btn--ghost" href="/">返回实时列表</a>
+        </div>
+      </header>
+
+      <% if (!records.length) { %>
+      <section class="empty-state">
+        <p>还没有收藏的资源，返回首页挑选一个吧！</p>
+      </section>
+      <% } else { %>
+      <section class="history-grid">
+        <% records.forEach(function(record) { %>
+        <article class="history-card">
+          <div class="history-card__cover">
+            <% if (record.coverUrl) { %>
+            <img src="<%= record.coverUrl %>" alt="<%= record.title %>" loading="lazy" />
+            <% } else { %>
+            <div class="history-card__cover--placeholder">暂无封面</div>
+            <% } %>
+            <div class="history-card__rating">
+              <% for (let i = 1; i <= 5; i += 1) { %>
+              <span class="star <%= i <= record.rating ? 'is-active' : '' %>">★</span>
+              <% } %>
+            </div>
+          </div>
+          <div class="history-card__body">
+            <h2><%= record.title %></h2>
+            <dl>
+              <div>
+                <dt>热度</dt>
+                <dd><%= record.heat || '未知' %></dd>
+              </div>
+              <div>
+                <dt>收录时间</dt>
+                <dd>
+                  <div><%= record.displayRecordedAt %></div>
+                  <small><%= record.relativeTime %></small>
+                </dd>
+              </div>
+              <div>
+                <dt>大小</dt>
+                <dd><%= record.displaySize %></dd>
+              </div>
+              <div>
+                <dt>类型</dt>
+                <dd><%= record.type_text || '未知' %></dd>
+              </div>
+            </dl>
+            <% if (record.tags?.length) { %>
+            <div class="history-card__tags">
+              <% record.tags.forEach(function(tag) { %>
+              <span class="tag-badge"><%= tag %></span>
+              <% }); %>
+            </div>
+            <% } %>
+            <div class="history-card__actions">
+              <% if (record.magnet) { %>
+              <a class="btn" href="<%= record.magnet %>">磁力下载</a>
+              <% } %>
+              <% if (record.detail_url) { %>
+              <a class="btn btn--ghost" href="<%= record.detail_url %>" target="_blank" rel="noreferrer">查看详情</a>
+              <% } %>
+            </div>
+          </div>
+        </article>
+        <% }); %>
+      </section>
+      <% } %>
+    </main>
+  </body>
+</html>
+
