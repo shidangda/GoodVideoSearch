@@ -1,0 +1,60 @@
+# Nginx 配置文件示例
+# 将此文件复制到 /etc/nginx/sites-available/goodvideosearch
+# 或根据您的系统配置到相应位置
+
+server {
+    listen 80;
+    server_name your-domain.com;  # 替换为您的域名或 IP 地址
+
+    # 如果使用 HTTPS，取消下面的注释
+    # listen 443 ssl http2;
+    # ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+    # ssl_protocols TLSv1.2 TLSv1.3;
+    # ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # 允许上传最大 10MB 的文件（封面图片）
+    client_max_body_size 10M;
+
+    # 访问日志
+    access_log /var/log/nginx/goodvideosearch_access.log;
+    error_log /var/log/nginx/goodvideosearch_error.log;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        
+        # WebSocket 支持（如果需要）
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        
+        # 传递真实 IP 和主机信息
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # 超时设置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # 缓存控制
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # 静态文件缓存（可选优化）
+    location /static/ {
+        proxy_pass http://localhost:3000;
+        proxy_cache_valid 200 1h;
+        add_header Cache-Control "public, max-age=3600";
+    }
+
+    # 封面图片缓存（可选优化）
+    location /covers/ {
+        proxy_pass http://localhost:3000;
+        proxy_cache_valid 200 7d;
+        add_header Cache-Control "public, max-age=604800";
+    }
+}
+

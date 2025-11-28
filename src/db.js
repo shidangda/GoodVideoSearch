@@ -55,6 +55,23 @@ async function ensureTables() {
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS history_common_records (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      resource_id VARCHAR(191) NOT NULL UNIQUE,
+      title VARCHAR(512) NOT NULL,
+      magnet TEXT,
+      detail_url TEXT,
+      heat INT,
+      recorded_at DATETIME NULL,
+      size_text VARCHAR(255),
+      type_text VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
 }
 
 async function bootstrap() {
