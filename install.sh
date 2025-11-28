@@ -54,8 +54,9 @@ else
     PROJECT_DIR="$HOME/GoodVideoSearch"
 fi
 
-# Node.js 版本（推荐使用 18 或更高版本）
-NODE_VERSION="18"
+# Node.js 版本（推荐使用 20 或更高版本）
+# 注意：axios 1.13+ 依赖的 undici 7.x 需要 Node.js 20.18.1+
+NODE_VERSION="20"
 
 # 数据库相关配置
 DB_NAME="goodvideo_archive"
@@ -934,7 +935,7 @@ main() {
     
     # 确认安装
     print_warning "此脚本将安装以下组件："
-    echo "  - Node.js ${NODE_VERSION}.x"
+    echo "  - Node.js ${NODE_VERSION}.x（必需：axios 依赖的 undici 需要 Node.js 20+）"
     echo "  - MySQL 数据库服务器"
     echo "  - Nginx Web 服务器"
     echo "  - PM2 进程管理器"
