@@ -58,7 +58,7 @@
               type="number"
               min="1"
               name="pageTo"
-              value="<%= typeof pageTo !== 'undefined' ? pageTo : 5 %>"
+              value="<%= typeof pageTo !== 'undefined' ? pageTo : 1 %>"
               aria-label="结束页"
             />
           </label>
@@ -76,7 +76,7 @@
       <section class="empty-state">
         <p>
           在第 <%= typeof pageFrom !== 'undefined' ? pageFrom : 1 %>
-          - <%= typeof pageTo !== 'undefined' ? pageTo : 5 %> 页中，
+          - <%= typeof pageTo !== 'undefined' ? pageTo : 1 %> 页中，
           未找到热度大于 <%= heatThreshold %> 的记录，稍后再试吧。
         </p>
       </section>

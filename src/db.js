@@ -14,7 +14,7 @@ const DB_NAME = process.env.DB_NAME || 'goodvideo_archive';
 const DB_HOST = process.env.DB_HOST || '127.0.0.1';
 const DB_PORT = Number(process.env.DB_PORT) || 3306;
 const DB_USER = process.env.DB_USER || 'goodvideo_user';
-const DB_PASSWORD = process.env.DB_PASSWORD || 'GoodVideoPass#2025';
+const DB_PASSWORD = process.env.DB_PASSWORD || 'ZhangJun123,03';
 
 const baseConfig = {
   host: DB_HOST,

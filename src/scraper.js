@@ -14,15 +14,19 @@ const USER_AGENT =
 // 统一默认配置，方便在其他模块中复用
 export const DEFAULT_HEAT_THRESHOLD = 50;
 export const DEFAULT_START_PAGE = 1;
-export const DEFAULT_END_PAGE = 5;
+export const DEFAULT_END_PAGE = 1; // 默认只访问第1页，减少请求频率
 
 // 适当提高并发，提升整体抓取速度（详情页并发数）
-const CONCURRENCY = 8;
+// 降低并发数，避免触发 429 限流
+const CONCURRENCY = 4;
 // 列表页请求间隔（毫秒），避免请求过快被限流
-const LISTING_PAGE_DELAY_MS = 800;
+// 增加延迟，降低被限流的风险
+const LISTING_PAGE_DELAY_MS = 2000;
 // 请求重试配置
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000; // 首次重试延迟 2 秒
+// 429 限流错误的重试延迟（更长，因为需要等待限流解除）
+const RATE_LIMIT_RETRY_DELAY_MS = 10000; // 10 秒
 
 const limit = pLimit(CONCURRENCY);
 
@@ -69,20 +73,30 @@ export async function getRecords({
         }
       });
 
-      // 列表页之间添加延迟，避免请求过快
+      // 列表页之间添加延迟，避免请求过快被限流
+      // 即使最后一页也添加延迟，避免后续详情页请求过快
       if (page < to) {
         await sleep(LISTING_PAGE_DELAY_MS);
+      } else {
+        // 最后一页也稍作延迟，给服务器喘息时间
+        await sleep(LISTING_PAGE_DELAY_MS / 2);
       }
     } catch (error) {
       console.error(`Failed to fetch listing page ${page} after retries: ${error.message}`);
     }
   }
 
-  const hydrated = (
-    await Promise.all(
-      listingItems.map((item) => limit(() => enrichWithDetail(item)))
-    )
-  ).filter(Boolean);
+  // 详情页请求之间也添加小延迟，避免并发过高触发限流
+  // 改用串行处理，每个请求后添加延迟，降低被限流的风险
+  const hydrated = [];
+  for (const item of listingItems) {
+    const result = await limit(() => enrichWithDetail(item));
+    if (result) {
+      hydrated.push(result);
+    }
+    // 每个详情页请求后稍作延迟（500ms），避免请求过快
+    await sleep(500);
+  }
 
   return hydrated
     .filter((item) => typeof item.heat === 'number' && item.heat > heatThreshold)
@@ -111,17 +125,25 @@ async function fetchHtmlWithRetry(url, retries = MAX_RETRIES) {
     return response.data;
   } catch (error) {
     // 判断是否为可重试的错误
+    const statusCode = error.response?.status;
+    const isRateLimit = statusCode === 429; // 429 Too Many Requests
     const isRetryable =
       error.code === 'ECONNABORTED' ||
       error.code === 'ETIMEDOUT' ||
       error.code === 'ECONNRESET' ||
       error.code === 'ENOTFOUND' ||
-      (error.response && error.response.status >= 500);
+      (error.response && error.response.status >= 500) ||
+      isRateLimit; // 429 错误也可以重试
 
     if (isRetryable && retries > 0) {
-      const delay = RETRY_DELAY_MS * (MAX_RETRIES - retries + 1); // 指数退避
+      // 对于 429 限流错误，使用更长的延迟
+      const baseDelay = isRateLimit
+        ? RATE_LIMIT_RETRY_DELAY_MS
+        : RETRY_DELAY_MS;
+      // 指数退避：每次重试延迟时间递增
+      const delay = baseDelay * (MAX_RETRIES - retries + 1);
       console.warn(
-        `Request failed for ${url}, retrying in ${delay}ms... (${retries} retries left)`,
+        `Request failed for ${url}${isRateLimit ? ' (Rate Limited)' : ''}, retrying in ${delay}ms... (${retries} retries left)`,
       );
       await sleep(delay);
       return fetchHtmlWithRetry(url, retries - 1);
