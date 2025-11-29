@@ -11,6 +11,13 @@ coverage/
 .env.local
 .env.*.local
 
+### Local data (do NOT version large assets)
+data/**
+!data/.gitkeep
+backups/**
+logs/**
+dump.pm2
+
 ### Logs
 npm-debug.log*
 yarn-debug.log*

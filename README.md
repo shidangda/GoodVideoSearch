@@ -128,6 +128,86 @@ sudo ./install.sh
 - [NGINX_CONFIG_GUIDE.md](./NGINX_CONFIG_GUIDE.md) - Nginx 配置指南
 - [REMOTE_DATABASE_ACCESS.md](./REMOTE_DATABASE_ACCESS.md) - 远程数据库访问配置
 
+## 💾 数据迁移
+
+项目提供了跨平台的数据备份和恢复脚本，支持在 Windows 和 Linux/macOS 之间迁移数据。
+
+### 备份数据
+
+#### Windows (PowerShell)
+```powershell
+# 在项目根目录执行
+.\scripts\export-data.ps1
+
+# 指定输出目录（可选）
+.\scripts\export-data.ps1 --out D:\Backups
+```
+
+#### Linux/macOS (Bash)
+```bash
+# 在项目根目录执行
+bash scripts/export_data.sh
+
+# 指定输出目录（可选）
+bash scripts/export_data.sh --out /path/to/backups
+```
+
+备份脚本会：
+- 导出 MySQL 数据库（使用 `mysqldump`）
+- 复制所有封面图片（`data/covers/` 目录）
+- 生成带时间戳的压缩包（Windows: `.zip`，Linux/macOS: `.tar.gz`）
+- 输出到 `backups/` 目录（默认）或指定目录
+
+### 恢复数据
+
+#### Windows (PowerShell)
+```powershell
+# 恢复指定备份文件
+.\scripts\import-data.ps1 backups\gvs-backup-20240101-120000.zip
+```
+
+#### Linux/macOS (Bash)
+```bash
+# 恢复指定备份文件
+bash scripts/import_data.sh backups/gvs-backup-20240101-120000.tar.gz
+```
+
+恢复脚本会：
+- 导入 MySQL 数据库（覆盖现有数据）
+- 合并封面图片（不会覆盖已存在的文件）
+- 自动清理临时文件
+
+### 迁移流程示例
+
+**从 Windows 迁移到 Ubuntu 服务器：**
+
+1. **在 Windows 上备份**
+   ```powershell
+   cd D:\pythonProject\GoodVideoSearch
+   .\scripts\export-data.ps1
+   ```
+   生成文件：`backups\gvs-backup-20240101-120000.zip`
+
+2. **上传到服务器**
+   ```bash
+   # 使用 scp 或其他工具上传
+   scp backups/gvs-backup-20240101-120000.zip user@server:/home/user/
+   ```
+
+3. **在服务器上恢复**
+   ```bash
+   cd ~/GoodVideoSearch
+   bash scripts/import_data.sh ~/gvs-backup-20240101-120000.tar.gz
+   ```
+
+### 注意事项
+
+1. **数据库配置**：确保目标服务器的 `.env` 文件已正确配置数据库连接信息
+2. **MySQL 客户端**：需要安装 MySQL 客户端工具（`mysqldump` 和 `mysql` 命令）
+3. **文件权限**：Linux/macOS 脚本需要执行权限，如无权限可运行：`chmod +x scripts/*.sh`
+4. **数据覆盖**：恢复操作会覆盖现有数据库数据，请谨慎操作
+5. **封面图片**：恢复时不会覆盖已存在的封面文件，只会添加新文件
+
 ## 📁 项目结构
 
 ```
@@ -141,11 +221,17 @@ GoodVideoSearch/
 │   │   └── history.ejs    # 历史记录页面模板
 │   └── public/             # 静态资源
 │       └── styles.css      # 样式文件
-├── data/                   # 数据目录（自动创建）
+├── data/                   # 数据目录（自动创建，不纳入 Git）
 │   └── covers/             # 封面图片存储目录
-├── install.sh             # 一键安装脚本
-├── package.json           # 项目依赖配置
-└── README.md             # 本文件
+├── backups/                # 备份目录（自动创建，不纳入 Git）
+├── scripts/                 # 工具脚本目录
+│   ├── export-data.ps1     # Windows 备份脚本
+│   ├── import-data.ps1      # Windows 恢复脚本
+│   ├── export_data.sh       # Linux/macOS 备份脚本
+│   └── import_data.sh       # Linux/macOS 恢复脚本
+├── install.sh              # 一键安装脚本
+├── package.json            # 项目依赖配置
+└── README.md              # 本文件
 ```
 
 ## 🔧 配置说明
@@ -189,6 +275,7 @@ GoodVideoSearch/
 3. **数据库**：首次运行会自动创建数据库和表，确保 MySQL 服务正常运行
 4. **封面存储**：封面图片存储在 `data/covers/` 目录，确保有足够的磁盘空间
 5. **端口占用**：确保 3000 端口未被占用，或通过环境变量 `PORT` 指定其他端口
+6. **Git 仓库**：封面图片和备份文件已通过 `.gitignore` 排除，不会提交到 Git 仓库，避免仓库体积过大
 
 ## 🛠️ 技术栈
 
