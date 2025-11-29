@@ -55,15 +55,17 @@ export async function getRecords({
   heatThreshold = DEFAULT_HEAT_THRESHOLD,
   startPage = DEFAULT_START_PAGE,
   endPage = DEFAULT_END_PAGE,
+  searchUrl = DEFAULT_SEARCH_URL,
 } = {}) {
   const { from, to } = normalizePageRange(startPage, endPage);
+  const searchContext = buildSearchContext(searchUrl);
 
   const listingItems = [];
 
   for (let page = from; page <= to; page += 1) {
-    const searchUrl = buildSearchUrl(page);
+    const searchPageUrl = buildSearchUrl(page, searchContext);
     try {
-      const listingHtml = await fetchHtmlWithRetry(searchUrl);
+      const listingHtml = await fetchHtmlWithRetry(searchPageUrl);
       const $ = load(listingHtml);
 
       $('.item').each((_, element) => {
@@ -164,20 +166,93 @@ function sleep(ms) {
 /**
  * 构造指定页码的搜索 URL
  */
-function buildSearchUrl(page) {
+function buildSearchUrl(page, context) {
   const safePage = Number.isFinite(page) && page > 0 ? page : DEFAULT_START_PAGE;
 
-  if (safePage === 1) {
-    return DEFAULT_SEARCH_URL;
+  if (safePage === 1 || !context.templatePath) {
+    return new URL(context.firstPagePath, context.baseUrl).href;
   }
 
-  // 站点分页规则：/search/666332_1_id.html、/search/666332_2_id.html、...
-  // 为避免 DEFAULT_SEARCH_PATH 被误改，这里用正则替换页码部分
-  const path = DEFAULT_SEARCH_PATH.replace(
-    /_(\d+)_id\.html$/,
-    `_${safePage}_id.html`,
-  );
-  return new URL(path, BASE_URL).href;
+  const path = context.templatePath.replace('{page}', safePage);
+  return new URL(path, context.baseUrl).href;
+}
+
+function buildSearchContext(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl || DEFAULT_SEARCH_URL);
+  } catch {
+    parsed = new URL(DEFAULT_SEARCH_URL);
+  }
+
+  const pagePattern = /_(\d+)_id\.html$/;
+  const templatePath = parsed.pathname.match(pagePattern)
+    ? parsed.pathname.replace(pagePattern, '_{page}_id.html')
+    : null;
+
+  return {
+    baseUrl: `${parsed.protocol}//${parsed.host}`,
+    firstPagePath: parsed.pathname,
+    templatePath,
+  };
+}
+
+function buildDetailRecord($, baseItem = {}) {
+  const detailText = cleanText($('.link-detail').text());
+  const magnet =
+    $('#mag-link').val() ||
+    cleanText($('#thread_share_text').text()) ||
+    null;
+
+  const detailMeta = extractMeta(detailText);
+  const heat = extractNumber(detailText, /热度\s*[:：]?\s*(\d+)/);
+  const recordedAt = extractRecordedAt(detailText);
+
+  const titleFromPage =
+    cleanText($('.box_line h1').first().text()) ||
+    cleanText($('h1').first().text());
+
+  const title =
+    baseItem.title ||
+    titleFromPage ||
+    baseItem.detailUrl ||
+    magnet ||
+    '未知标题';
+
+  const mergedMeta = {
+    ...(baseItem.meta || {}),
+    ...detailMeta,
+  };
+
+  return {
+    ...baseItem,
+    title,
+    magnet,
+    heat,
+    recordedAt,
+    meta: mergedMeta,
+  };
+}
+
+function normalizeDetailUrl(value) {
+  if (typeof value !== 'string') {
+    throw new Error('请提供有效的详情页地址');
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error('详情页地址不能为空');
+  }
+
+  try {
+    return new URL(trimmed).href;
+  } catch {
+    // 如果是相对路径，补全 BASE_URL
+    try {
+      return new URL(trimmed, BASE_URL).href;
+    } catch {
+      throw new Error('详情页地址格式不正确');
+    }
+  }
 }
 
 /**
@@ -215,25 +290,24 @@ async function enrichWithDetail(item) {
   try {
     const html = await fetchHtmlWithRetry(item.detailUrl);
     const $ = load(html);
-    const magnet =
-      $('#mag-link').val() ||
-      cleanText($('#thread_share_text').text()) ||
-      null;
-    const detailText = cleanText($('.link-detail').text());
-
-    const heat = extractNumber(detailText, /热度\s*[:：]?\s*(\d+)/);
-    const recordedAt = extractRecordedAt(detailText);
-
-    return {
-      ...item,
-      magnet,
-      heat,
-      recordedAt,
-    };
+    return buildDetailRecord($, item);
   } catch (error) {
     console.error(`Failed to hydrate ${item.detailUrl}: ${error.message}`);
     return null;
   }
+}
+
+export async function getRecordFromDetail(detailUrl) {
+  const normalized = normalizeDetailUrl(detailUrl);
+  const html = await fetchHtmlWithRetry(normalized);
+  const $ = load(html);
+  const record = buildDetailRecord($, {
+    detailUrl: normalized,
+  });
+  if (!record || !record.title) {
+    throw new Error('未能解析该详情页，请确认地址是否正确');
+  }
+  return record;
 }
 
 function extractMeta(text) {

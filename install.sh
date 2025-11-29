@@ -474,14 +474,18 @@ configure_database() {
 -- 创建数据库
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- 创建用户并设置密码（同时创建 localhost 和 127.0.0.1 两个版本）
+-- 创建用户并设置密码（同时创建 localhost、127.0.0.1 和远程连接版本）
 -- 因为 MySQL 中 localhost 和 127.0.0.1 被视为不同的主机
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
 CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
+-- 创建允许远程连接的用户（用于 DBeaver 等工具）
+-- 注意：使用 % 允许所有IP，建议生产环境只允许特定IP
+CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASSWORD}';
 
 -- 授予所有权限
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';
 
 -- 刷新权限表
 FLUSH PRIVILEGES;

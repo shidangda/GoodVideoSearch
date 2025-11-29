@@ -28,9 +28,20 @@
               value="<%= searchUrl %>"
               placeholder="https://www.cilifan.mom/search/666332_1_id.html"
               aria-label="目标列表页地址"
-              required
+              <%= detailUrl ? '' : 'required' %>
             />
             <small class="filter__hint">默认抓取上述地址，可粘贴任意同类列表页。</small>
+          </label>
+          <label class="filter__wide">
+            单个详情页（可选）
+            <input
+              type="url"
+              name="detailUrl"
+              value="<%= detailUrl || '' %>"
+              placeholder="https://www.cilifan.mom/thread/xxxxxx.html"
+              aria-label="单个资源详情页地址"
+            />
+            <small class="filter__hint">填写后将直接解析该资源，忽略上方列表配置（更快用于评分）。</small>
           </label>
           <label>
             热度下限
@@ -71,14 +82,23 @@
         <strong>请求失败：</strong> <%= errorMessage %>
       </div>
       <% } %>
+      <% if ((typeof errorMessage === 'undefined' || !errorMessage) && isDetailMode) { %>
+      <div class="banner banner--info">
+        当前处于单个详情页模式：<%= detailUrl %>。如需批量抓取，请清空该输入框。
+      </div>
+      <% } %>
 
       <% if (!records.length) { %>
       <section class="empty-state">
+        <% if (isDetailMode) { %>
+        <p>未能解析该详情页，可能已失效或暂不可访问，请确认地址后重试。</p>
+        <% } else { %>
         <p>
           在第 <%= typeof pageFrom !== 'undefined' ? pageFrom : 1 %>
           - <%= typeof pageTo !== 'undefined' ? pageTo : 1 %> 页中，
           未找到热度大于 <%= heatThreshold %> 的记录，稍后再试吧。
         </p>
+        <% } %>
       </section>
       <% } else { %>
       <section class="grid">

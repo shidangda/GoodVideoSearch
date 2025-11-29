@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime.js';
 import {
   getRecords,
+  getRecordFromDetail,
   DEFAULT_HEAT_THRESHOLD,
   DEFAULT_START_PAGE,
   DEFAULT_END_PAGE,
@@ -71,16 +72,25 @@ app.get('/', async (req, res, next) => {
       DEFAULT_END_PAGE,
     );
     const normalizedSearchUrl = normalizeSearchUrl(req.query.searchUrl);
+    const detailOnlyUrl = normalizeDetailUrl(req.query.detailUrl);
 
     const normalizedFrom = Math.max(1, pageFrom);
     const normalizedTo = Math.max(normalizedFrom, pageTo);
 
-    const records = await getRecords({
-      heatThreshold,
-      startPage: normalizedFrom,
-      endPage: normalizedTo,
-      searchUrl: normalizedSearchUrl,
-    });
+    let records;
+    let detailMode = false;
+    if (detailOnlyUrl) {
+      detailMode = true;
+      const singleRecord = await getRecordFromDetail(detailOnlyUrl);
+      records = singleRecord ? [singleRecord] : [];
+    } else {
+      records = await getRecords({
+        heatThreshold,
+        startPage: normalizedFrom,
+        endPage: normalizedTo,
+        searchUrl: normalizedSearchUrl,
+      });
+    }
 
     // 过滤掉已存在于历史表中的记录
     const filteredRecords = [];
@@ -113,6 +123,8 @@ app.get('/', async (req, res, next) => {
       pageFrom: normalizedFrom,
       pageTo: normalizedTo,
       searchUrl: normalizedSearchUrl,
+      detailUrl: detailOnlyUrl,
+      isDetailMode: detailMode,
       lastUpdated: dayjs().format('YYYY-MM-DD HH:mm:ss'),
       targetUrl: new URL('/', req.protocol + '://' + req.get('host')).href,
     });
@@ -260,6 +272,7 @@ app.use((err, req, res, _next) => {
   const pageFrom = Math.max(1, from);
   const pageTo = Math.max(pageFrom, to);
   const normalizedSearchUrl = normalizeSearchUrl(req.query.searchUrl);
+  const detailUrl = normalizeDetailUrl(req.query.detailUrl);
 
   res.status(500).render('index', {
     records: [],
@@ -267,6 +280,8 @@ app.use((err, req, res, _next) => {
     pageFrom,
     pageTo,
     searchUrl: normalizedSearchUrl,
+    detailUrl,
+    isDetailMode: Boolean(detailUrl),
     lastUpdated: dayjs().format('YYYY-MM-DD HH:mm:ss'),
     targetUrl: req.originalUrl,
     errorMessage:
@@ -302,6 +317,27 @@ function normalizeSearchUrl(value) {
     return parsed.href;
   } catch (error) {
     return DEFAULT_SEARCH_URL;
+  }
+}
+
+function normalizeDetailUrl(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.href;
+  } catch {
+    try {
+      const parsed = new URL(trimmed, DEFAULT_SEARCH_URL);
+      return parsed.href;
+    } catch {
+      return '';
+    }
   }
 }
 
