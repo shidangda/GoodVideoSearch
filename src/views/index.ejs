@@ -10,70 +10,75 @@
     <% const FEATURE_TAGS = ['高颜值', '高身长', '美腿', '温柔可爱', '高冷御姐']; %>
     <main class="page">
       <header class="page__header">
-        <div>
-          <h1>高热度资源筛选</h1>
-          <p class="page__subtitle">
-            最近更新：<span><%= lastUpdated %></span>
-          </p>
-        </div>
-        <div class="header-actions">
-          <a class="btn btn--ghost" href="/history">历史资源</a>
+        <div class="page__header-top">
+          <div class="page__header-title">
+            <h1>高热度资源筛选</h1>
+            <p class="page__subtitle">
+              最近更新：<span><%= lastUpdated %></span>
+            </p>
+          </div>
+          <div class="header-actions">
+            <a class="btn btn--ghost" href="/history">历史资源</a>
+          </div>
         </div>
         <form class="filter" method="get">
-          <label class="filter__wide">
-            数据来源
-            <input
-              type="url"
-              name="searchUrl"
-              value="<%= searchUrl %>"
-              placeholder="https://www.cilifan.mom/search/666332_1_id.html"
-              aria-label="目标列表页地址"
-              <%= detailUrl ? '' : 'required' %>
-            />
-            <small class="filter__hint">默认抓取上述地址，可粘贴任意同类列表页。</small>
-          </label>
-          <label class="filter__wide">
-            单个详情页（可选）
-            <input
-              type="url"
-              name="detailUrl"
-              value="<%= detailUrl || '' %>"
-              placeholder="https://www.cilifan.mom/thread/xxxxxx.html"
-              aria-label="单个资源详情页地址"
-            />
-            <small class="filter__hint">填写后将直接解析该资源，忽略上方列表配置（更快用于评分）。</small>
-          </label>
-          <label>
-            热度下限
-            <input
-              type="number"
-              min="0"
-              name="heat"
-              value="<%= heatThreshold %>"
-              aria-label="热度下限"
-            />
-          </label>
-          <label>
-            起始页
-            <input
-              type="number"
-              min="1"
-              name="pageFrom"
-              value="<%= typeof pageFrom !== 'undefined' ? pageFrom : 1 %>"
-              aria-label="起始页"
-            />
-          </label>
-          <label>
-            结束页
-            <input
-              type="number"
-              min="1"
-              name="pageTo"
-              value="<%= typeof pageTo !== 'undefined' ? pageTo : 1 %>"
-              aria-label="结束页"
-            />
-          </label>
-          <button type="submit">刷新</button>
+          <div class="filter__section">
+            <label class="filter__wide">
+              <span class="filter__label">数据来源</span>
+              <input
+                type="url"
+                name="searchUrl"
+                value="<%= searchUrl %>"
+                placeholder="https://www.cilifan.mom/search/666332_1_id.html"
+                aria-label="目标列表页地址"
+                <%= detailUrl ? '' : 'required' %>
+              />
+            </label>
+            <label class="filter__wide">
+              <span class="filter__label">单个详情页 <span class="filter__optional">（可选）</span></span>
+              <input
+                type="url"
+                id="detailUrl"
+                name="detailUrl"
+                value="<%= detailUrl || '' %>"
+                placeholder="https://www.cilifan.mom/thread/xxxxxx.html"
+                aria-label="单个资源详情页地址"
+              />
+            </label>
+          </div>
+          <div class="filter__section filter__section--inline">
+            <label>
+              <span class="filter__label">热度下限</span>
+              <input
+                type="number"
+                min="0"
+                name="heat"
+                value="<%= heatThreshold %>"
+                aria-label="热度下限"
+              />
+            </label>
+            <label>
+              <span class="filter__label">起始页</span>
+              <input
+                type="number"
+                min="1"
+                name="pageFrom"
+                value="<%= typeof pageFrom !== 'undefined' ? pageFrom : 1 %>"
+                aria-label="起始页"
+              />
+            </label>
+            <label>
+              <span class="filter__label">结束页</span>
+              <input
+                type="number"
+                min="1"
+                name="pageTo"
+                value="<%= typeof pageTo !== 'undefined' ? pageTo : 1 %>"
+                aria-label="结束页"
+              />
+            </label>
+            <button type="submit" class="filter__submit">刷新</button>
+          </div>
         </form>
       </header>
 
