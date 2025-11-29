@@ -448,85 +448,91 @@ install_dependencies() {
 ################################################################################
 configure_database() {
     print_separator "步骤 8/13: 配置 MySQL 数据库"
-    
-    # 获取数据库密码
-    print_info "需要设置数据库用户密码"
-    read -sp "请输入数据库密码（将用于 $DB_USER 用户）: " DB_PASSWORD
+
+    # 选择一个可用的 root 执行方式
+    local MYSQL_ROOT_CMD=""
+    if mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
+        MYSQL_ROOT_CMD="mysql -u root"
+    elif mysql -u root -p"temp_root_pass" -e "SELECT 1" >/dev/null 2>&1; then
+        MYSQL_ROOT_CMD="mysql -u root -p\"temp_root_pass\""
+    elif sudo mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
+        MYSQL_ROOT_CMD="sudo mysql -u root"
+    else
+        MYSQL_ROOT_CMD=""
+    fi
+
+    # 预检查：数据库、用户、表是否已齐全
+    local DB_EXISTS=0 USER_COUNT=0 TABLES_OK=0
+    if [ -n "$MYSQL_ROOT_CMD" ]; then
+        DB_EXISTS=$(eval "$MYSQL_ROOT_CMD -N -s -e \"SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='${DB_NAME}'\"" 2>/dev/null || echo 0)
+        USER_COUNT=$(eval "$MYSQL_ROOT_CMD -N -s -e \"SELECT COUNT(*) FROM mysql.user WHERE user='${DB_USER}' AND host IN ('localhost','127.0.0.1','%')\"" 2>/dev/null || echo 0)
+        TABLES_OK=$(eval "$MYSQL_ROOT_CMD -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name IN ('history_records','history_common_records')\"" 2>/dev/null || echo 0)
+    fi
+
+    if [ "$DB_EXISTS" -ge 1 ] && [ "$USER_COUNT" -ge 1 ]; then
+        print_success "数据库(${DB_NAME})与用户(${DB_USER})已存在"
+        if [ "$TABLES_OK" -ge 2 ]; then
+            print_success "依赖的表(history_records, history_common_records)已存在，跳过本步骤"
+        else
+            print_warning "依赖的表未全部存在，将在步骤 10 自动创建"
+        fi
+        # 不再提示设置密码，但后续 .env 可能需要密码
+        return 0
+    fi
+
+    # 需要创建时，才提示设置密码
+    print_info "未检测到完整的数据库/用户配置，需要设置数据库用户密码"
+    read -sp "请输入数据库密码（用于 ${DB_USER} 用户）: " DB_PASSWORD
     echo
     read -sp "请再次确认密码: " DB_PASSWORD_CONFIRM
     echo
-    
     if [ "$DB_PASSWORD" != "$DB_PASSWORD_CONFIRM" ]; then
         print_error "两次输入的密码不一致"
         exit 1
     fi
-    
     if [ -z "$DB_PASSWORD" ]; then
         print_error "密码不能为空"
         exit 1
     fi
-    
+
     print_info "创建数据库和用户..."
-    
-    # 创建 SQL 脚本
     SQL_FILE=$(mktemp)
     cat > "$SQL_FILE" << EOF
 -- 创建数据库
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 创建用户并设置密码（同时创建 localhost、127.0.0.1 和远程连接版本）
--- 因为 MySQL 中 localhost 和 127.0.0.1 被视为不同的主机
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
 CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
--- 创建允许远程连接的用户（用于 DBeaver 等工具）
--- 注意：使用 % 允许所有IP，建议生产环境只允许特定IP
 CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASSWORD}';
 
--- 授予所有权限
+-- 授权
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';
-
--- 刷新权限表
 FLUSH PRIVILEGES;
-
--- 显示创建的数据库
-SHOW DATABASES LIKE '${DB_NAME}';
 EOF
-    
-    # 执行 SQL 脚本
-    # 注意：这里使用 root 用户，需要 root 密码
-    # 如果 MySQL 8.0+ 使用 auth_socket 认证，可能需要调整
+
     print_info "执行数据库配置脚本..."
-    
-    # 尝试使用 root 用户连接
-    # 方法1: 尝试无密码连接（MySQL 8.0+ 可能使用 auth_socket）
-    if mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
-        mysql -u root < "$SQL_FILE"
-        print_success "使用 root 用户创建数据库和用户"
-    # 方法2: 尝试使用临时密码连接
-    elif mysql -u root -p"temp_root_pass" -e "SELECT 1" >/dev/null 2>&1; then
-        mysql -u root -p"temp_root_pass" < "$SQL_FILE"
-        print_success "使用 root 用户（临时密码）创建数据库和用户"
-    # 方法3: 使用 sudo mysql（Ubuntu 默认配置）
-    elif sudo mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
-        sudo mysql -u root < "$SQL_FILE"
-        print_success "使用 sudo mysql 创建数据库和用户"
+    if [ -n "$MYSQL_ROOT_CMD" ]; then
+        # 使用已探测到的 root 方式
+        eval "$MYSQL_ROOT_CMD < \"$SQL_FILE\""
+        if [ "$?" -eq 0 ]; then
+            print_success "数据库和用户已创建/更新"
+        else
+            print_warning "自动执行失败，请手动执行以下 SQL："
+            cat "$SQL_FILE"
+            read -p "按 Enter 继续（假设您已手动执行 SQL）..."
+        fi
     else
-        print_warning "无法自动连接 MySQL，需要手动配置"
-        print_info "请手动执行以下 SQL 命令："
+        print_warning "无法自动连接 MySQL，请手动执行以下 SQL："
         cat "$SQL_FILE"
         echo ""
-        print_info "连接方式："
-        echo "  1. sudo mysql -u root"
-        echo "  2. 或 mysql -u root -p（输入安装时设置的密码）"
-        echo ""
+        echo "连接方式示例：sudo mysql -u root"
         read -p "按 Enter 继续（假设您已手动执行 SQL）..."
     fi
-    
-    # 清理临时文件
+
     rm -f "$SQL_FILE"
-    
     print_success "数据库配置完成"
 }
 
@@ -613,6 +619,13 @@ create_database_tables() {
     fi
     
     print_info "数据库配置: $DB_USER@$DB_HOST:$DB_PORT/$DB_NAME"
+    
+    # 预检查：若两张表均已存在则跳过本步骤
+    TABLES_OK=$(mysql -u "${DB_USER}" -p"${DB_PASSWORD}" -h "${DB_HOST}" -P "${DB_PORT}" "${DB_NAME}" -N -s -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name IN ('history_records','history_common_records');" 2>/dev/null || echo 0)
+    if [ "$TABLES_OK" -ge 2 ]; then
+        print_success "依赖的数据表(history_records, history_common_records)已存在，跳过创建"
+        return 0
+    fi
     
     # 创建 SQL 脚本文件
     SQL_FILE=$(mktemp)
@@ -800,33 +813,37 @@ configure_nginx() {
     print_info "创建 Nginx 配置文件: $NGINX_CONF"
     
     # 清理变量，确保不包含任何颜色代码或特殊字符
-    # 移除可能的 ANSI 颜色代码
-    PUBLIC_IP=$(echo "$PUBLIC_IP" | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\n\r' | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
-    if [ -n "$DOMAIN_NAME" ]; then
-        DOMAIN_NAME=$(echo "$DOMAIN_NAME" | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\n\r' | tr -d ' ')
-    fi
-    
+    strip_ansi() { sed 's/\x1b\[[0-9;]*m//g'; }
+    # IP 只保留 IPv4
+    PUBLIC_IP=$(echo "$PUBLIC_IP" | strip_ansi | tr -d '\n\r' | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+    DOMAIN_NAME=$(echo "${DOMAIN_NAME:-}" | strip_ansi | tr -d '\n\r ')
+
     # 验证 IP 地址格式
     if [[ ! $PUBLIC_IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
         print_error "IP 地址格式无效: $PUBLIC_IP"
         exit 1
     fi
-    
-    # 构建 server_name 配置
+
+    # 仅允许域名合法字符
     if [ -n "$DOMAIN_NAME" ]; then
-        # 如果有域名，同时支持 IP 和域名访问
-        SERVER_NAMES="$DOMAIN_NAME $PUBLIC_IP"
+        DOMAIN_SAFE=$(echo "$DOMAIN_NAME" | grep -oE '[A-Za-z0-9.-]+' | tr -d '\n')
+    else
+        DOMAIN_SAFE=""
+    fi
+
+    # 构建 server_name 配置（只用安全字符）
+    if [ -n "$DOMAIN_SAFE" ]; then
+        SERVER_NAMES="$DOMAIN_SAFE $PUBLIC_IP"
         print_info "Nginx 将同时支持域名和 IP 访问"
-        print_info "  域名: $DOMAIN_NAME"
+        print_info "  域名: $DOMAIN_SAFE"
         print_info "  IP: $PUBLIC_IP"
     else
-        # 如果只有 IP，只使用 IP
         SERVER_NAMES="$PUBLIC_IP"
         print_info "Nginx 将使用 IP 访问: $PUBLIC_IP"
     fi
-    
+
     # 创建配置文件，确保输出干净
-    cat > "$NGINX_CONF" << EOF
+    cat > "$NGINX_CONF" <<EOF
 server {
     listen 80;
     server_name ${SERVER_NAMES};
