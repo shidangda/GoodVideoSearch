@@ -89,32 +89,27 @@
             <h2><%= record.title %></h2>
             <dl>
               <div>
-                <dt>热度</dt>
-                <dd><%= record.heat || '未知' %></dd>
-              </div>
-              <div>
                 <dt>收录时间</dt>
-                <dd>
-                  <div><%= record.displayRecordedAt %></div>
-                  <small><%= record.relativeTime %></small>
-                </dd>
+                <dd><%= record.displayRecordedAt %></dd>
               </div>
               <div>
                 <dt>大小</dt>
                 <dd><%= record.displaySize %></dd>
               </div>
-              <div>
-                <dt>类型</dt>
-                <dd><%= record.type_text || '未知' %></dd>
-              </div>
             </dl>
-            <% if (record.tags?.length) { %>
+            <% const _tags = Array.isArray(record.tags) ? record.tags : []; %>
             <div class="history-card__tags">
-              <% record.tags.forEach(function(tag) { %>
-              <span class="tag-badge"><%= tag %></span>
-              <% }); %>
+              <span class="history-card__tags-label">特征</span>
+              <div class="history-card__tags-list is-text">
+                <% if (_tags.length) { %>
+                  <% _tags.forEach(function(tag) { %>
+                    <span class="tag-text"><%= tag %></span>
+                  <% }); %>
+                <% } else { %>
+                  <span class="tag-empty">无</span>
+                <% } %>
+              </div>
             </div>
-            <% } %>
             <div class="history-card__actions">
               <% if (record.magnet) { %>
               <a class="btn" href="<%= record.magnet %>">磁力下载</a>

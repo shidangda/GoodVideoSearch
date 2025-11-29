@@ -712,15 +712,19 @@ body.history-page {
   right: 0.5rem;
   display: flex;
   gap: 0.1rem;
+  /* Reverted to watermark style - no background */
 }
 
 .history-card__rating .star {
-  color: rgba(251, 191, 36, 0.6);
-  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease;
 }
 
 .history-card__rating .star.is-active {
-  color: #f59e0b;
+  color: #facc15; /* Brighter yellow */
+  text-shadow: 0 0 6px rgba(250, 204, 21, 0.8);
 }
 
 .history-card__body {
@@ -728,6 +732,8 @@ body.history-page {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  flex: 1;           /* 占满剩余空间，让按钮能贴底 */
+  min-height: 0;     /* 避免内容撑爆导致溢出 */
 }
 
 .history-card__body h2 {
@@ -739,7 +745,7 @@ body.history-page {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.5rem;
-  margin: 0;
+  margin: 0 0 0.5rem;
 }
 
 .history-card__body dt {
@@ -757,22 +763,70 @@ body.history-page {
 
 .history-card__tags {
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.5rem;
   flex-wrap: wrap;
+  padding: 0.75rem 0;
+  margin-top: 0.25rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 
-.tag-badge {
-  padding: 0.25rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.15);
-  color: #1e3a8a;
-  font-size: 0.8rem;
+.history-card__tags-label {
+  font-size: 0.7rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   font-weight: 600;
+  flex-shrink: 0;
+  margin-right: 0.25rem;
+}
+
+.history-card__tags-list {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem 0.4rem;   /* 行内与换行后的间距 */
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+/* 文字版标签（无需按钮/胶囊） */
+.history-card__tags-list.is-text .tag-text {
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.35rem;
+  background: rgba(30, 64, 175, 0.08); /* 深蓝轻底，偏柔和 */
+  color: #1e3a8a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* 胶囊版（暂保留，如后续需要按钮样式可切换） */
+.tag-badge {
+  padding: 0.28rem 0.6rem;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(99, 102, 241, 0.08));
+  color: #1e40af;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  transition: all 0.2s ease;
+}
+
+.tag-badge:hover { background: rgba(59, 130, 246, 0.16); }
+
+.tag-separator { display: none; }
+
+/* 空状态 */
+.tag-empty {
+  color: #94a3b8;
+  font-size: 0.82rem;
 }
 
 .history-card__actions {
   display: flex;
   gap: 0.75rem;
+  margin-top: auto;           /* 将按钮组推到底部 */
+  align-items: stretch;       /* 按钮等高 */
 }
 
 .history-card .btn {

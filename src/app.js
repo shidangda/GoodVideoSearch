@@ -373,12 +373,44 @@ function formatSizeToGb(rawValue) {
 }
 
 function safeParseTags(value) {
-  try {
-    const parsed = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+  // 支持 MySQL JSON 返回为字符串、对象或 Buffer 的多种情况
+  if (Array.isArray(value)) {
+    return value;
   }
+  if (value == null) return [];
+  // Buffer -> string
+  if (Buffer.isBuffer?.(value)) {
+    try {
+      const str = value.toString('utf8');
+      const parsed = JSON.parse(str || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  // 已是对象但不是数组
+  if (typeof value === 'object') {
+    // 尝试把对象按数组读取，或序列化后再解析
+    if (Array.isArray(value)) return value;
+    try {
+      const parsed = JSON.parse(JSON.stringify(value));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  // 字符串
+  if (typeof value === 'string') {
+    try {
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 app.listen(PORT, () => {

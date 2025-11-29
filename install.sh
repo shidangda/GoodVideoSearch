@@ -714,7 +714,8 @@ EOF
 # 获取公网 IP 地址
 ################################################################################
 get_public_ip() {
-    print_info "正在获取服务器公网 IP 地址..."
+    # 注意：所有 print_* 输出必须重定向到 stderr，避免被命令替换捕获
+    print_info "正在获取服务器公网 IP 地址..." >&2
     
     # 尝试多个 API 获取公网 IP，按优先级排序
     PUBLIC_IP=""
@@ -729,26 +730,28 @@ get_public_ip() {
     )
     
     for api in "${IP_APIS[@]}"; do
-        print_info "尝试从 $api 获取..."
+        print_info "尝试从 $api 获取..." >&2
         PUBLIC_IP=$(curl -s --max-time 5 "$api" 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
         
         if [ -n "$PUBLIC_IP" ] && [[ $PUBLIC_IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            print_success "获取到公网 IP: $PUBLIC_IP"
+            print_success "获取到公网 IP: $PUBLIC_IP" >&2
+            # 只输出 IP 地址到标准输出
             echo "$PUBLIC_IP"
             return 0
         fi
     done
     
     # 如果所有 API 都失败，尝试使用内网 IP（作为备选）
-    print_warning "无法获取公网 IP，使用内网 IP 作为备选"
+    print_warning "无法获取公网 IP，使用内网 IP 作为备选" >&2
     FALLBACK_IP=$(hostname -I | awk '{print $1}')
     if [ -n "$FALLBACK_IP" ]; then
-        print_warning "使用内网 IP: $FALLBACK_IP"
+        print_warning "使用内网 IP: $FALLBACK_IP" >&2
+        # 只输出 IP 地址到标准输出
         echo "$FALLBACK_IP"
         return 0
     fi
     
-    print_error "无法获取 IP 地址"
+    print_error "无法获取 IP 地址" >&2
     return 1
 }
 
@@ -796,6 +799,19 @@ configure_nginx() {
     
     print_info "创建 Nginx 配置文件: $NGINX_CONF"
     
+    # 清理变量，确保不包含任何颜色代码或特殊字符
+    # 移除可能的 ANSI 颜色代码
+    PUBLIC_IP=$(echo "$PUBLIC_IP" | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\n\r' | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+    if [ -n "$DOMAIN_NAME" ]; then
+        DOMAIN_NAME=$(echo "$DOMAIN_NAME" | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\n\r' | tr -d ' ')
+    fi
+    
+    # 验证 IP 地址格式
+    if [[ ! $PUBLIC_IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        print_error "IP 地址格式无效: $PUBLIC_IP"
+        exit 1
+    fi
+    
     # 构建 server_name 配置
     if [ -n "$DOMAIN_NAME" ]; then
         # 如果有域名，同时支持 IP 和域名访问
@@ -809,6 +825,7 @@ configure_nginx() {
         print_info "Nginx 将使用 IP 访问: $PUBLIC_IP"
     fi
     
+    # 创建配置文件，确保输出干净
     cat > "$NGINX_CONF" << EOF
 server {
     listen 80;
