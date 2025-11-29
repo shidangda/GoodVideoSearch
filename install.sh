@@ -711,21 +711,84 @@ EOF
 }
 
 ################################################################################
+# 获取公网 IP 地址
+################################################################################
+get_public_ip() {
+    print_info "正在获取服务器公网 IP 地址..."
+    
+    # 尝试多个 API 获取公网 IP，按优先级排序
+    PUBLIC_IP=""
+    
+    # API 列表（按优先级）
+    IP_APIS=(
+        "https://api.ipify.org"
+        "https://ifconfig.me/ip"
+        "https://icanhazip.com"
+        "https://ipinfo.io/ip"
+        "https://checkip.amazonaws.com"
+    )
+    
+    for api in "${IP_APIS[@]}"; do
+        print_info "尝试从 $api 获取..."
+        PUBLIC_IP=$(curl -s --max-time 5 "$api" 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+        
+        if [ -n "$PUBLIC_IP" ] && [[ $PUBLIC_IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            print_success "获取到公网 IP: $PUBLIC_IP"
+            echo "$PUBLIC_IP"
+            return 0
+        fi
+    done
+    
+    # 如果所有 API 都失败，尝试使用内网 IP（作为备选）
+    print_warning "无法获取公网 IP，使用内网 IP 作为备选"
+    FALLBACK_IP=$(hostname -I | awk '{print $1}')
+    if [ -n "$FALLBACK_IP" ]; then
+        print_warning "使用内网 IP: $FALLBACK_IP"
+        echo "$FALLBACK_IP"
+        return 0
+    fi
+    
+    print_error "无法获取 IP 地址"
+    return 1
+}
+
+################################################################################
 # 步骤 11: 配置 Nginx 反向代理
 ################################################################################
 configure_nginx() {
     print_separator "步骤 11/13: 配置 Nginx 反向代理"
     
-    # 获取域名或 IP
-    if [ -z "$DOMAIN_NAME" ]; then
-        print_info "请输入域名（如果使用域名访问）或按 Enter 使用服务器 IP"
-        read -p "域名或 IP: " DOMAIN_NAME
+    # 自动获取公网 IP
+    PUBLIC_IP=$(get_public_ip)
+    if [ -z "$PUBLIC_IP" ]; then
+        print_error "无法获取公网 IP，请手动输入"
+        read -p "请输入服务器公网 IP 地址: " PUBLIC_IP
+        if [ -z "$PUBLIC_IP" ]; then
+            print_error "IP 地址不能为空"
+            exit 1
+        fi
     fi
     
-    # 如果没有输入，使用服务器 IP
-    if [ -z "$DOMAIN_NAME" ]; then
-        DOMAIN_NAME=$(hostname -I | awk '{print $1}')
-        print_info "将使用服务器 IP: $DOMAIN_NAME"
+    print_info "检测到服务器公网 IP: $PUBLIC_IP"
+    
+    # 询问是否配置域名
+    DOMAIN_NAME=""
+    read -p "是否配置域名访问？(y/n，默认 n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        read -p "请输入域名（例如: example.com）: " DOMAIN_NAME
+        
+        # 验证域名格式（简单验证）
+        if [ -z "$DOMAIN_NAME" ]; then
+            print_warning "未输入域名，将仅使用 IP 访问"
+            DOMAIN_NAME=""
+        elif [[ ! $DOMAIN_NAME =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$ ]]; then
+            print_warning "域名格式可能不正确，但将继续使用: $DOMAIN_NAME"
+        else
+            print_success "已配置域名: $DOMAIN_NAME"
+        fi
+    else
+        print_info "将仅使用 IP 访问"
     fi
     
     # 创建 Nginx 配置文件
@@ -733,10 +796,23 @@ configure_nginx() {
     
     print_info "创建 Nginx 配置文件: $NGINX_CONF"
     
+    # 构建 server_name 配置
+    if [ -n "$DOMAIN_NAME" ]; then
+        # 如果有域名，同时支持 IP 和域名访问
+        SERVER_NAMES="$DOMAIN_NAME $PUBLIC_IP"
+        print_info "Nginx 将同时支持域名和 IP 访问"
+        print_info "  域名: $DOMAIN_NAME"
+        print_info "  IP: $PUBLIC_IP"
+    else
+        # 如果只有 IP，只使用 IP
+        SERVER_NAMES="$PUBLIC_IP"
+        print_info "Nginx 将使用 IP 访问: $PUBLIC_IP"
+    fi
+    
     cat > "$NGINX_CONF" << EOF
 server {
     listen 80;
-    server_name ${DOMAIN_NAME};
+    server_name ${SERVER_NAMES};
 
     # 允许上传最大 10MB 的文件（封面图片）
     client_max_body_size 10M;
@@ -931,6 +1007,15 @@ start_application() {
 show_summary() {
     print_separator "安装完成！"
     
+    # 获取访问地址（优先使用域名，否则使用 IP）
+    if [ -n "$DOMAIN_NAME" ]; then
+        ACCESS_URL="http://${DOMAIN_NAME}"
+        ACCESS_INFO="域名: ${DOMAIN_NAME} 或 IP: ${PUBLIC_IP:-未知}"
+    else
+        ACCESS_URL="http://${PUBLIC_IP:-未知}"
+        ACCESS_INFO="IP: ${PUBLIC_IP:-未知}"
+    fi
+    
     echo ""
     echo -e "${GREEN}✓ 所有组件安装完成${NC}"
     echo ""
@@ -938,7 +1023,10 @@ show_summary() {
     echo "应用信息："
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  项目目录: $PROJECT_DIR"
-    echo "  访问地址: http://${DOMAIN_NAME}"
+    echo "  访问地址: $ACCESS_URL"
+    if [ -n "$DOMAIN_NAME" ]; then
+        echo "  同时支持: http://${PUBLIC_IP:-未知}"
+    fi
     echo "  应用端口: $APP_PORT"
     echo ""
     echo "数据库信息："
