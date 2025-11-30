@@ -52,6 +52,9 @@ if [[ "$ARCHIVE" == *.zip ]]; then
     # Windows zip 文件
     if command -v unzip >/dev/null 2>&1; then
         unzip -q "$ARCHIVE" -d "$TEMP_DIR"
+        # 调试：列出解压后的目录结构
+        echo "[DEBUG] Contents after extraction:" >&2
+        find "$TEMP_DIR" -type f -o -type d | head -20 | sed 's|^|  |' >&2
     else
         echo "[ERROR] unzip not found. Please install unzip: sudo apt-get install unzip" >&2
         exit 1
@@ -59,6 +62,9 @@ if [[ "$ARCHIVE" == *.zip ]]; then
 elif [[ "$ARCHIVE" == *.tar.gz ]] || [[ "$ARCHIVE" == *.tgz ]]; then
     # Linux tar.gz 文件
     tar -xzf "$ARCHIVE" -C "$TEMP_DIR"
+    # 调试：列出解压后的目录结构
+    echo "[DEBUG] Contents after extraction:" >&2
+    find "$TEMP_DIR" -type f -o -type d | head -20 | sed 's|^|  |' >&2
 else
     echo "[ERROR] Unsupported archive format. Please use .tar.gz or .zip" >&2
     exit 1
@@ -81,11 +87,16 @@ password=$DB_PASSWORD
 EOF
     chmod 600 "$MYSQL_CONFIG_FILE"
     
-    if mysql --defaults-file="$MYSQL_CONFIG_FILE" "$DB_NAME" < "$DB_FILE" 2>/dev/null; then
+    if mysql --defaults-file="$MYSQL_CONFIG_FILE" "$DB_NAME" < "$DB_FILE" 2>&1; then
         rm -f "$MYSQL_CONFIG_FILE"
         echo "[OK] Database restored successfully"
     else
-        echo "[ERROR] Database restore failed" >&2
+        EXIT_CODE=$?
+        echo "[ERROR] Database restore failed (exit code: $EXIT_CODE)" >&2
+        echo "[ERROR] Please check:" >&2
+        echo "[ERROR]   1. Database connection settings in .env" >&2
+        echo "[ERROR]   2. Database '$DB_NAME' exists and user has permissions" >&2
+        echo "[ERROR]   3. SQL file is valid" >&2
         rm -f "$MYSQL_CONFIG_FILE"
         exit 1
     fi
@@ -95,6 +106,17 @@ fi
 
 # 恢复封面图片
 COVERS_SRC="$TEMP_DIR/data/covers"
+# 调试：检查可能的路径
+if [[ ! -d "$COVERS_SRC" ]]; then
+    echo "[DEBUG] Checking alternative paths..." >&2
+    echo "[DEBUG]  Looking for: $COVERS_SRC" >&2
+    echo "[DEBUG]  Temp dir contents:" >&2
+    ls -la "$TEMP_DIR" 2>/dev/null | head -10 | sed 's|^|    |' >&2 || true
+    if [[ -d "$TEMP_DIR/data" ]]; then
+        echo "[DEBUG]  data/ directory contents:" >&2
+        ls -la "$TEMP_DIR/data" 2>/dev/null | sed 's|^|    |' >&2 || true
+    fi
+fi
 if [[ -d "$COVERS_SRC" ]]; then
     echo "[INFO] Restoring cover images..."
     COVERS_DST="$PROJECT_DIR/data/covers"

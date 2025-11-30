@@ -141,7 +141,14 @@ $manifest | Out-File -FilePath (Join-Path $workDir "manifest.json") -Encoding ut
 
 # 压缩
 Write-Host "[INFO] Creating archive..." -ForegroundColor Cyan
-Get-ChildItem -Path $workDir -File -Recurse | Compress-Archive -DestinationPath $archivePath -Force
+# 使用 -Path 参数指定目录内容，保留目录结构
+# 需要切换到工作目录以确保相对路径正确
+Push-Location $workDir
+try {
+    Compress-Archive -Path * -DestinationPath $archivePath -Force
+} finally {
+    Pop-Location
+}
 
 # 清理临时目录
 Remove-Item -Recurse -Force $workDir
