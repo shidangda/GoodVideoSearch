@@ -94,11 +94,56 @@ password=$DB_PASSWORD
 [System.IO.File]::WriteAllText($mysqlConfigFile, $configContent.Replace("`r`n", "`n"), [System.Text.Encoding]::ASCII)
 
 try {
-    & mysqldump "--defaults-file=$mysqlConfigFile" `
-        --single-transaction --quick --hex-blob $DB_NAME | Out-File -FilePath $dbFile -Encoding utf8 -NoNewline
+    # 使用临时文件捕获输出和错误
+    $tempDumpFile = "$dbFile.tmp"
+    $tempErrorFile = "$dbFile.err"
     
-    if ($LASTEXITCODE -ne 0) {
-        throw "mysqldump failed with exit code $LASTEXITCODE"
+    # 执行 mysqldump，分离标准输出和错误输出
+    # 使用 --no-tablespaces 选项避免 PROCESS 权限问题
+    & mysqldump "--defaults-file=$mysqlConfigFile" `
+        --single-transaction --quick --hex-blob --no-tablespaces $DB_NAME > $tempDumpFile 2> $tempErrorFile
+    
+    $exitCode = $LASTEXITCODE
+    
+    # 检查错误输出
+    $errorContent = if (Test-Path $tempErrorFile) {
+        Get-Content $tempErrorFile -Raw -ErrorAction SilentlyContinue
+    } else {
+        ""
+    }
+    
+    # 验证 SQL 文件是否生成且不为空
+    $sqlFileExists = Test-Path $tempDumpFile
+    $sqlFileSize = if ($sqlFileExists) { (Get-Item $tempDumpFile).Length } else { 0 }
+    
+    # 如果 SQL 文件已生成且不为空，即使有警告也继续
+    if ($sqlFileExists -and $sqlFileSize -gt 0) {
+        # 显示警告但不中断
+        if ($errorContent -match "PROCESS privilege" -or $errorContent -match "tablespaces") {
+            Write-Host "[WARN] mysqldump warning (ignored): $errorContent" -ForegroundColor Yellow
+        } elseif ($errorContent -and $exitCode -eq 0) {
+            # 退出码为 0 但有错误输出，可能是警告
+            Write-Host "[WARN] mysqldump warning: $errorContent" -ForegroundColor Yellow
+        }
+    } elseif ($exitCode -ne 0) {
+        # SQL 文件未生成或为空，且退出码非 0，这是真正的错误
+        throw "mysqldump failed with exit code ${exitCode}: $errorContent"
+    } elseif (-not $sqlFileExists -or $sqlFileSize -eq 0) {
+        # 退出码为 0 但文件为空，也是错误
+        throw "SQL file is empty or not created. Error output: $errorContent"
+    }
+    
+    # 读取内容并转换为 UTF-8 无 BOM（跨平台兼容）
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    $content = [System.IO.File]::ReadAllText($tempDumpFile, [System.Text.Encoding]::Default)
+    [System.IO.File]::WriteAllText($dbFile, $content, $utf8NoBom)
+    
+    # 清理临时文件
+    if (Test-Path $tempDumpFile) {
+        Remove-Item $tempDumpFile -Force
+    }
+    if (Test-Path $tempErrorFile) {
+        Remove-Item $tempErrorFile -Force
     }
 } catch {
     Write-Host "[ERROR] Database export failed: $_" -ForegroundColor Red
@@ -111,13 +156,13 @@ try {
     }
 }
 
-# 复制封面图片
-$coversSrc = Join-Path $ProjectDir "data\covers"
+# 复制封面图片（使用 Join-Path 确保跨平台兼容）
+$coversSrc = Join-Path $ProjectDir (Join-Path "data" "covers")
 if (Test-Path $coversSrc) {
     $coverFiles = Get-ChildItem $coversSrc -File -ErrorAction SilentlyContinue
     if ($coverFiles) {
         Write-Host "[INFO] Copying cover images..." -ForegroundColor Cyan
-        $coversDst = Join-Path $workDir "data\covers"
+        $coversDst = Join-Path $workDir (Join-Path "data" "covers")
         New-Item -ItemType Directory -Force -Path $coversDst | Out-Null
         Copy-Item -Path $coverFiles.FullName -Destination $coversDst -Force
         $coverCount = $coverFiles.Count
@@ -141,13 +186,78 @@ $manifest | Out-File -FilePath (Join-Path $workDir "manifest.json") -Encoding ut
 
 # 压缩
 Write-Host "[INFO] Creating archive..." -ForegroundColor Cyan
-# 使用 -Path 参数指定目录内容，保留目录结构
-# 需要切换到工作目录以确保相对路径正确
-Push-Location $workDir
+# 使用 .NET ZipFile 类确保使用正斜杠作为路径分隔符（跨平台兼容）
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+# 删除已存在的归档文件
+if (Test-Path $archivePath) {
+    Remove-Item $archivePath -Force
+}
+
+# 创建 ZIP 文件并添加所有文件（使用正斜杠）
+# 使用 CreateFromDirectory 方法更简单且兼容性更好
 try {
-    Compress-Archive -Path * -DestinationPath $archivePath -Force
-} finally {
-    Pop-Location
+    # 先创建空的 ZIP 文件
+    $zip = [System.IO.Compression.ZipFile]::Open($archivePath, [System.IO.Compression.ZipArchiveMode]::Create)
+    $zip.Dispose()
+    
+    # 重新打开并添加文件
+    $zip = [System.IO.Compression.ZipFile]::Open($archivePath, [System.IO.Compression.ZipArchiveMode]::Update)
+    try {
+        Get-ChildItem -Path $workDir -Recurse -File | ForEach-Object {
+            # 计算相对路径（相对于 $workDir）
+            $relativePath = $_.FullName.Substring($workDir.Length + 1)
+            # 确保使用正斜杠（跨平台兼容）
+            $relativePath = $relativePath.Replace('\', '/')
+            # 添加到 ZIP
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $relativePath) | Out-Null
+        }
+    } finally {
+        $zip.Dispose()
+    }
+} catch {
+    # 如果 ZipArchiveMode 枚举不可用，使用替代方法
+    Write-Host "[WARN] Using alternative ZIP creation method..." -ForegroundColor Yellow
+    # 使用 Compress-Archive 创建临时 ZIP，然后重新打包修复路径分隔符
+    $tempZip = "$archivePath.tmp"
+    Push-Location $workDir
+    try {
+        Compress-Archive -Path * -DestinationPath $tempZip -Force
+    } finally {
+        Pop-Location
+    }
+    
+    # 重新打开 ZIP 文件并修复路径分隔符
+    try {
+        $zip = [System.IO.Compression.ZipFile]::Open($tempZip, [System.IO.Compression.ZipArchiveMode]::Read)
+        $newZip = [System.IO.Compression.ZipFile]::Open($archivePath, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+            foreach ($entry in $zip.Entries) {
+                # 将反斜杠替换为正斜杠
+                $fixedName = $entry.FullName.Replace('\', '/')
+                $newEntry = $newZip.CreateEntry($fixedName)
+                $entryStream = $entry.Open()
+                $newEntryStream = $newEntry.Open()
+                try {
+                    $entryStream.CopyTo($newEntryStream)
+                } finally {
+                    $entryStream.Close()
+                    $newEntryStream.Close()
+                }
+            }
+        } finally {
+            $zip.Dispose()
+            $newZip.Dispose()
+        }
+        Remove-Item $tempZip -Force
+    } catch {
+        # 如果重新打包失败，使用原始 ZIP（Linux unzip 通常可以处理反斜杠）
+        Write-Host "[WARN] Could not fix path separators, using original ZIP (Linux unzip should handle it)" -ForegroundColor Yellow
+        if (Test-Path $archivePath) {
+            Remove-Item $archivePath -Force
+        }
+        Move-Item $tempZip $archivePath -Force
+    }
 }
 
 # 清理临时目录

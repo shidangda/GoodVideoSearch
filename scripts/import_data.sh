@@ -51,7 +51,15 @@ echo "[INFO] Extracting archive..."
 if [[ "$ARCHIVE" == *.zip ]]; then
     # Windows zip 文件
     if command -v unzip >/dev/null 2>&1; then
-        unzip -q "$ARCHIVE" -d "$TEMP_DIR"
+        # 解压 ZIP 文件，忽略路径分隔符警告（unzip 可以处理，只是警告）
+        # 将警告信息过滤掉，但保留错误信息
+        unzip -q "$ARCHIVE" -d "$TEMP_DIR" 2>&1 | grep -v "backslashes" || {
+            # 检查解压是否真的失败（退出码非0）
+            if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+                echo "[ERROR] Failed to extract ZIP file" >&2
+                exit 1
+            fi
+        }
         # 调试：列出解压后的目录结构
         echo "[DEBUG] Contents after extraction:" >&2
         find "$TEMP_DIR" -type f -o -type d | head -20 | sed 's|^|  |' >&2
@@ -87,6 +95,7 @@ password=$DB_PASSWORD
 EOF
     chmod 600 "$MYSQL_CONFIG_FILE"
     
+    # 使用 UTF-8 编码读取 SQL 文件（跨平台兼容）
     if mysql --defaults-file="$MYSQL_CONFIG_FILE" "$DB_NAME" < "$DB_FILE" 2>&1; then
         rm -f "$MYSQL_CONFIG_FILE"
         echo "[OK] Database restored successfully"

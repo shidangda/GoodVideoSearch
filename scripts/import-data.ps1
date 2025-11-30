@@ -119,13 +119,21 @@ password=$DB_PASSWORD
         Write-Host "[WARN] db.sql not found in archive" -ForegroundColor Yellow
     }
 
-    # 恢复封面图片
-    $coversSrc = Join-Path $tempDir "data\covers"
+    # 恢复封面图片（使用 Join-Path 确保跨平台兼容）
+    $coversSrc = Join-Path $tempDir (Join-Path "data" "covers")
+    # 也检查可能的反斜杠路径（兼容旧备份）
+    if (-not (Test-Path $coversSrc)) {
+        $coversSrcAlt = Join-Path $tempDir "data\covers"
+        if (Test-Path $coversSrcAlt) {
+            $coversSrc = $coversSrcAlt
+        }
+    }
+    
     if (Test-Path $coversSrc) {
         $coverFiles = Get-ChildItem $coversSrc -File -ErrorAction SilentlyContinue
         if ($coverFiles) {
             Write-Host "[INFO] Restoring cover images..." -ForegroundColor Cyan
-            $coversDst = Join-Path $ProjectDir "data\covers"
+            $coversDst = Join-Path $ProjectDir (Join-Path "data" "covers")
             New-Item -ItemType Directory -Force -Path $coversDst | Out-Null
             
             # 复制文件，避免覆盖已存在的
@@ -147,6 +155,7 @@ password=$DB_PASSWORD
         }
     } else {
         Write-Host "[WARN] Cover directory not found in archive" -ForegroundColor Yellow
+        Write-Host "[DEBUG] Checked path: $coversSrc" -ForegroundColor Gray
     }
 
     Write-Host ""
