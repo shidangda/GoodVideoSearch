@@ -178,7 +178,7 @@ if [[ -d "$COVERS_SRC" ]]; then
   SKIPPED=0
 
   if command -v find >/dev/null 2>&1; then
-    while IFS= read -r file; do
+    find "$COVERS_SRC" -type f 2>/dev/null | while IFS= read -r file; do
       [[ -f "$file" ]] || continue
       DEST="$COVERS_DST/$(basename "$file")"
       if [[ ! -f "$DEST" ]]; then
@@ -187,7 +187,7 @@ if [[ -d "$COVERS_SRC" ]]; then
       else
         ((SKIPPED++))
       fi
-    done < <(find "$COVERS_SRC" -type f 2>/dev/null)
+    done
   else
     for file in "$COVERS_SRC"/*; do
       [[ -f "$file" ]] || continue
